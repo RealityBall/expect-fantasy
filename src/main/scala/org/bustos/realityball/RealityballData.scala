@@ -52,9 +52,15 @@ class RealityballData {
     }
   }
 
-  def latestFantasyData(game: Game, player: Player): HitterFantasyMoving = {
+  def latestFantasyData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
-      hitterFantasyMoving.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
+      hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
+    }
+  }
+
+  def latestFantasyVolData(game: Game, player: Player): HitterFantasy = {
+    db.withSession { implicit session =>
+      hitterFantasyVolatilityTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
     }
   }
 
@@ -87,12 +93,8 @@ class RealityballData {
     }
 
     db.withSession { implicit session =>
-      slope(hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.take(25))
+      slope(hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.take(MovingAverageWindow))
     }
-  }
-
-  def latestBallparkBA(game: Game): Double = {
-    0.0
   }
 
   def playerFromRetrosheetId(retrosheetId: String, year: String): Player = {
@@ -277,13 +279,13 @@ class RealityballData {
   }
 
   def hitterFantasyQuery(id: String, year: String): Query[HitterFantasyTable, HitterFantasyTable#TableElementType, Seq] = {
-    if (year == "All") hitterFantasyStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterFantasyStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterFantasyTable.filter(_.id === truePlayerID(id)).sortBy(_.date)
+    else hitterFantasyTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
   }
 
   def hitterFantasyMovingQuery(id: String, year: String): Query[HitterFantasyMovingTable, HitterFantasyMovingTable#TableElementType, Seq] = {
-    if (year == "All") hitterFantasyMovingStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterFantasyMovingStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterFantasyMovingTable.filter(_.id === truePlayerID(id)).sortBy(_.date)
+    else hitterFantasyMovingTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
   }
 
   def pitcherFantasyQuery(id: String, year: String): Query[PitcherFantasyTable, PitcherFantasyTable#TableElementType, Seq] = {
@@ -351,9 +353,9 @@ class RealityballData {
     db.withSession { implicit session =>
       val playerStats = {
         gameName match {
-          case "FanDuel"    => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.fanDuelMov, p.LHfanDuelMov, p.RHfanDuelMov)).list
-          case "DraftKings" => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.draftKingsMov, p.LHdraftKingsMov, p.RHdraftKingsMov)).list
-          case "Draftster"  => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.draftsterMov, p.LHdraftsterMov, p.RHdraftsterMov)).list
+          case "FanDuel"    => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.fanDuel, p.LHfanDuel, p.RHfanDuel)).list
+          case "DraftKings" => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.draftKings, p.LHdraftKings, p.RHdraftKings)).list
+          case "Draftster"  => hitterFantasyMovingQuery(id, year).map(p => (p.date, p.draftster, p.LHdraftster, p.RHdraftster)).list
         }
       }
       playerStats.map({ x => BattingAverageObservation(x._1, displayDouble(x._2), displayDouble(x._3), displayDouble(x._4)) })
@@ -508,7 +510,7 @@ class RealityballData {
       list.map({ x =>
         {
           running.enqueue(x._2)
-          if (running.size > 25) running.dequeue
+          if (running.size > TeamMovingAverageWindow) running.dequeue
           (x._1, x._2, running.foldLeft(0.0)(_ + _) / running.size)
         }
       })
@@ -537,7 +539,7 @@ class RealityballData {
     }
   }
 
-  def ballparkBAbyDate(team: String, date: String): BattingAverageObservation = {
+  def ballparkBAbyDate(team: String, date: String): BattingAverageSummaries = {
     import scala.collection.mutable.Queue
 
     def safeRatio(x: Double, y: Double): Double = {
@@ -553,20 +555,37 @@ class RealityballData {
       list.map({ x =>
         {
           if (!x.bAvg.isNaN) running_1.enqueue(x.bAvg)
-          if (running_1.size > 25) running_1.dequeue
+          if (running_1.size > MovingAverageWindow) running_1.dequeue
           if (!x.lhBAvg.isNaN) running_2.enqueue(x.lhBAvg)
-          if (running_2.size > 25) running_3.dequeue
+          if (running_2.size > MovingAverageWindow) running_3.dequeue
           if (!x.rhBAvg.isNaN) running_3.enqueue(x.rhBAvg)
-          if (running_3.size > 25) running_3.dequeue
+          if (running_3.size > MovingAverageWindow) running_3.dequeue
           BattingAverageObservation(x.date, running_1.foldLeft(0.0)(_ + _) / running_1.size, running_2.foldLeft(0.0)(_ + _) / running_2.size, running_3.foldLeft(0.0)(_ + _) / running_3.size)
         }
       })
     }
 
     db.withSession { implicit session =>
-      var records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(25)
-      var processed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
-      replaceWithMovingAverage(processed).reverse.head
+      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(MovingAverageWindow)
+      val processed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
+      val ba = replaceWithMovingAverage(processed).reverse.head
+      val obpProcessed = records.map { x =>
+        BattingAverageObservation(x.date,
+          safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch + x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch,
+            x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly + x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly),
+          safeRatio(x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch, x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly),
+          safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch, x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly))
+      }
+      val obp = replaceWithMovingAverage(processed).reverse.head
+      val slgProcessed = records.map { x =>
+        BattingAverageObservation(x.date,
+          safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch + x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch,
+            x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly + x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly),
+          safeRatio(x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch, x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly),
+          safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch, x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly))
+      }
+      val slg = replaceWithMovingAverage(processed).reverse.head
+      BattingAverageSummaries(ba, obp, slg)
     }
   }
 
@@ -586,11 +605,11 @@ class RealityballData {
       list.map({ x =>
         {
           if (!x.bAvg.isNaN) running_1.enqueue(x.bAvg)
-          if (running_1.size > 25) running_1.dequeue
+          if (running_1.size > MovingAverageWindow) running_1.dequeue
           if (!x.lhBAvg.isNaN) running_2.enqueue(x.lhBAvg)
-          if (running_2.size > 25) running_3.dequeue
+          if (running_2.size > MovingAverageWindow) running_3.dequeue
           if (!x.rhBAvg.isNaN) running_3.enqueue(x.rhBAvg)
-          if (running_3.size > 25) running_3.dequeue
+          if (running_3.size > MovingAverageWindow) running_3.dequeue
           BattingAverageObservation(x.date, running_1.foldLeft(0.0)(_ + _) / running_1.size, running_2.foldLeft(0.0)(_ + _) / running_2.size, running_3.foldLeft(0.0)(_ + _) / running_3.size)
         }
       })
@@ -630,6 +649,12 @@ class RealityballData {
           }
         })
       }
+    }
+  }
+
+  def odds(game: Game): GameOdds = {
+    db.withSession { implicit session =>
+      gameOddsTable.filter({ x => x.id === game.id }).list.head
     }
   }
 

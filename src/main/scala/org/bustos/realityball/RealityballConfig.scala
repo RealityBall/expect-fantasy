@@ -4,6 +4,7 @@ import org.joda.time._
 import org.joda.time.format._
 import scala.slick.driver.MySQLDriver.simple._
 import scala.util.Properties.envOrElse
+import scala.math.{ pow, sqrt }
 
 object RealityballConfig {
 
@@ -25,5 +26,16 @@ object RealityballConfig {
   val CcyymmddDelimFormatter = DateTimeFormat.forPattern("yyyy_MM_dd")
   val CcyymmddSlashDelimFormatter = DateTimeFormat.forPattern("yyyy/MM/dd")
   val YearFormatter = DateTimeFormat.forPattern("yyyy")
+
+  val MovingAverageWindow = 25
+  val TeamMovingAverageWindow = 10
+
+  val MovingAverageExponentialWeights: List[Double] = {
+    val alpha = 0.9
+
+    val rawWeights = (1 to MovingAverageWindow).map({ x => pow(alpha, x.toDouble) })
+    val totalWeight = rawWeights.foldLeft(0.0)(_ + _)
+    rawWeights.map(_ / totalWeight).toList
+  }
 
 }
