@@ -237,14 +237,17 @@ class RealityballData {
     GoogleTable(columns, rows).toJson.prettyPrint
   }
 
-  def dataNumericTable2(data: List[(String, AnyVal, AnyVal)], titles: List[String]): String = {
-    val columns = List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"))
-    val rows = data.map(obs => GoogleRow(List(new GoogleCell(obs._1), new GoogleCell(obs._2), new GoogleCell(obs._3))))
+  def dataNumericTable2(data: List[(String, AnyVal, AnyVal)], titles: List[String], tooltips: List[String]): String = {
+    val columns = if (tooltips == Nil) List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"))
+    else List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"), new GoogleTooltipColumn)
+    val rows = if (tooltips == Nil) data.map(obs => GoogleRow(List(new GoogleCell(obs._1), new GoogleCell(obs._2), new GoogleCell(obs._3))))
+    else data.zip(tooltips).map(obs => GoogleRow(List(new GoogleCell(obs._1._1), new GoogleCell(obs._1._2), new GoogleCell(obs._1._3), new GoogleCell(obs._2))))
     GoogleTable(columns, rows).toJson.prettyPrint
   }
 
-  def dataNumericTable3(data: List[(String, AnyVal, AnyVal, AnyVal)], titles: List[String]): String = {
-    val columns = List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"), new GoogleColumn(titles(2), titles(2), "number"))
+  def dataNumericTable3(data: List[(String, AnyVal, AnyVal, AnyVal)], titles: List[String], tooltips: List[String]): String = {
+    val columns = if (tooltips == Nil) List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"), new GoogleColumn(titles(2), titles(2), "number"))
+    else List(new GoogleColumn("Date", "Date", "string"), new GoogleColumn(titles(0), titles(0), "number"), new GoogleColumn(titles(1), titles(1), "number"), new GoogleColumn(titles(2), titles(2), "number"), new GoogleTooltipColumn)
     val rows = data.map(obs => GoogleRow(List(new GoogleCell(obs._1), new GoogleCell(obs._2), new GoogleCell(obs._3), new GoogleCell(obs._4))))
     GoogleTable(columns, rows).toJson.prettyPrint
   }
@@ -678,6 +681,71 @@ class RealityballData {
         ids <- idMappingTable if injuries.mlbId === ids.mlbId
       } yield (ids.mlbName, injuries.reportTime, injuries.injuryReportDate, injuries.status, injuries.dueBack, injuries.injury)
       injuryReports.list.map({ x => InjuryReport(x._1, x._2, x._3, x._4, x._5, x._6) })
+    }
+  }
+
+  def availablePredictionDates: List[String] = {
+    db.withSession { implicit session =>
+      val q = Q[(String)] + "select distinct(substr(gameId, 4, 8)) as date from fantasyPrediction order by date"
+      q.list
+    }
+  }
+
+  def predictions(date: String, position: String, platform: String): (List[(String, Double, Double)], List[String]) = {
+    val dateForm = CcyymmddFormatter.parseDateTime(date)
+    val doubleFormat = "%1.3f"
+
+    def sortPlatform(x: FantasyPredictionTable): Column[Option[Double]] = {
+      platform match {
+        case "Fanduel"    => x.eFanduel
+        case "DraftKings" => x.eDraftKings
+        case "Draftster"  => x.eDraftster
+      }
+    }
+
+    def platformResults(x: FantasyPredictionTable, y: HitterFantasyTable, z: PlayersTable): (Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[String], Column[String], Column[String], Column[String], Column[String]) = {
+      platform match {
+        case "Fanduel"    => (x.eFanduel, y.fanDuel, x.fanduelBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
+        case "DraftKings" => (x.eDraftKings, y.draftKings, x.draftKingsBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
+        case "Draftster"  => (x.eDraftster, y.draftster, x.draftsterBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
+      }
+    }
+
+    def resultRow(running: (Int, List[(String, Double, Double)], List[String]),
+                  aRow: (Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], String, String, String, String, String)): (Int, List[(String, Double, Double)], List[String]) = {
+      val tooltip = "<div style='padding:5px 5px 5px 5px;width:200px;'>" +
+        "<style type='text/css'>td{width:95px;}h5{text-align:center}</style>" +
+        "<h5>" + aRow._8 + " " + aRow._9 + " (" + aRow._11 + " for " + aRow._10 + ")</h5>" +
+        "<table style='width:190px;'>" +
+        "<tr><td>Base:</td><td align='right'>" + doubleFormat.format(aRow._3.getOrElse(Double.NaN)) + "</td></tr>" +
+        "<tr><td>PitcherAdj:</td><td align='right'>" + doubleFormat.format(aRow._4.getOrElse(Double.NaN)) + "</td></tr>" +
+        "<tr><td>ParkAdj:</td><td align='right'>" + doubleFormat.format(aRow._5.getOrElse(Double.NaN)) + "</td></tr>" +
+        "<tr><td>OddsAdj:</td><td align='right'>" + doubleFormat.format(aRow._6.getOrElse(Double.NaN)) + "</td></tr>" +
+        "<tr><td>BaTrendAdj:</td><td align='right'>" + doubleFormat.format(aRow._7.getOrElse(Double.NaN)) + "</td></tr>" +
+        "</table></div>"
+      (running._1 + 1, (running._1.toString, aRow._1.getOrElse(Double.NaN), aRow._2.getOrElse(Double.NaN)) :: running._2, tooltip :: running._3)
+    }
+
+    db.withSession { implicit session =>
+      val query = {
+        if (position == "UNIVERSE") {
+          for {
+            predictions <- fantasyPredictionTable if (predictions.gameId like "%" + date + "%")
+            hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === predictions.gameId && hitterFantasy.id === predictions.id)
+            players <- playersTable if (players.id === hitterFantasy.id && players.year === dateForm.getYear.toString)
+          } yield (predictions, hitterFantasy, players)
+        } else {
+          for {
+            predictions <- fantasyPredictionTable if (predictions.gameId like "%" + date + "%")
+            hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === predictions.gameId && hitterFantasy.id === predictions.id)
+            players <- playersTable if (players.id === hitterFantasy.id && players.year === dateForm.getYear.toString && players.position === position)
+          } yield (predictions, hitterFantasy, players)
+        }
+      }
+      var count = 0
+      val rows = query.sortBy({ x => sortPlatform(x._1) }).map({ x => platformResults(x._1, x._2, x._3) }).list
+      val transformed = rows.foldLeft((0, List.empty[(String, Double, Double)], List.empty[String]))({ case (x, y) => resultRow(x, y) })
+      (transformed._2, transformed._3)
     }
   }
 

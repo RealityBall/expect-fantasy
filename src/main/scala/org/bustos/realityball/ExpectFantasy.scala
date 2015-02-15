@@ -19,7 +19,7 @@ object ExpectFantasy extends App {
     lineup.zipWithIndex.filter({
       case (p, i) => {
         val latestRegime = realityballData.latestLineupRegime(game, p)
-        if (((i + 1) - latestRegime) < 2 || i < 5) true
+        if (((i + 1) - latestRegime) <= 2) true
         else {
           logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
           false
