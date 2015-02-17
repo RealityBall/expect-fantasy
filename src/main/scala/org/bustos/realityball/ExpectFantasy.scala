@@ -13,39 +13,40 @@ object ExpectFantasy extends App {
   val realityballData = new RealityballData
   val logger = LoggerFactory.getLogger(getClass)
 
-  val expectationDate = new DateTime(2014, 8, 24, 0, 0)
+  def matchups(date: DateTime) = {
 
-  def filteredByRegime(game: Game, lineup: List[Player]): List[Player] = {
-    lineup.zipWithIndex.filter({
-      case (p, i) => {
-        val latestRegime = realityballData.latestLineupRegime(game, p)
-        if (((i + 1) - latestRegime) <= 2) true
-        else {
-          logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
-          false
+    def filteredByRegime(game: Game, lineup: List[Player]): List[Player] = {
+      lineup.zipWithIndex.filter({
+        case (p, i) => {
+          val latestRegime = realityballData.latestLineupRegime(game, p)
+          if (((i + 1) - latestRegime) <= 2) true
+          else {
+            logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
+            false
+          }
         }
+      }).unzip._1
+    }
+
+    def filteredByInjury(lineup: List[Player]): List[Player] = {
+      lineup
+    }
+
+    def filteredByWeather(lineup: List[Player]): List[Player] = {
+      lineup
+    }
+
+    realityballData.games(date).foldLeft(Map.empty[Game, Map[Player, List[Player]]]) { (x, game) =>
+      {
+        val homeStarter = realityballData.playerFromRetrosheetId(game.startingHomePitcher, date.getYear.toString)
+        val visitingStarter = realityballData.playerFromRetrosheetId(game.startingVisitingPitcher, date.getYear.toString)
+        logger.info("Getting lineups for " + game.visitingTeam + " (" + visitingStarter.id + ") @ " + game.homeTeam + " (" + homeStarter.id + ")")
+
+        val visitingLineup = filteredByInjury(filteredByRegime(game, realityballData.startingBatters(game, 0, date.getYear.toString)))
+        val homeLineup = filteredByInjury(filteredByRegime(game, realityballData.startingBatters(game, 1, date.getYear.toString)))
+
+        x + (game -> Map((homeStarter -> visitingLineup), (visitingStarter -> homeLineup)))
       }
-    }).unzip._1
-  }
-
-  def filteredByInjury(lineup: List[Player]): List[Player] = {
-    lineup
-  }
-
-  def filteredByWeather(lineup: List[Player]): List[Player] = {
-    lineup
-  }
-
-  val matchups = realityballData.games(expectationDate).foldLeft(Map.empty[Game, Map[Player, List[Player]]]) { (x, game) =>
-    {
-      val homeStarter = realityballData.playerFromRetrosheetId(game.startingHomePitcher, expectationDate.getYear.toString)
-      val visitingStarter = realityballData.playerFromRetrosheetId(game.startingVisitingPitcher, expectationDate.getYear.toString)
-      logger.info("Getting lineups for " + game.visitingTeam + " (" + visitingStarter.id + ") @ " + game.homeTeam + " (" + homeStarter.id + ")")
-
-      val visitingLineup = filteredByInjury(filteredByRegime(game, realityballData.startingBatters(game, 0, expectationDate.getYear.toString)))
-      val homeLineup = filteredByInjury(filteredByRegime(game, realityballData.startingBatters(game, 1, expectationDate.getYear.toString)))
-
-      x + (game -> Map((homeStarter -> visitingLineup), (visitingStarter -> homeLineup)))
     }
   }
 
@@ -53,88 +54,113 @@ object ExpectFantasy extends App {
     Some(0.0)
   }
 
+  def processMatchups(date: DateTime) = {
+    matchups(date).foreach({
+      case (game, v) => {
+        val odds = realityballData.odds(game)
+        v.foreach {
+          case (pitcher, batters) =>
+            {
+              batters.foreach { batter =>
+                {
+                  val baseFantasyScore = realityballData.latestFantasyData(game, batter)
+                  val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
+                  val movingStats = realityballData.latestBAdata(game, batter)
+                  val pitcherAdj = {
+                    if (pitcher.throwsWith == "R") {
+                      (movingStats.RHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
+                        movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
+                        movingStats.RHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
+                    } else {
+                      (movingStats.LHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
+                        movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
+                        movingStats.LHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
+                    }
+                  }
+                  val parkAdj = {
+                    if (game.startingVisitingPitcher == pitcher.id) 1.0
+                    else {
+                      val visitorHomeBallparkAve = realityballData.ballparkBAbyDate(game.visitingTeam, game.date)
+                      val homeHomeBallparkAve = realityballData.ballparkBAbyDate(game.homeTeam, game.date)
+                      val lefty = ((homeHomeBallparkAve.ba.lhBAvg + homeHomeBallparkAve.slg.lhBAvg) / 2.0) /
+                        ((visitorHomeBallparkAve.ba.lhBAvg + visitorHomeBallparkAve.slg.lhBAvg) / 2.0)
+                      val righty = ((homeHomeBallparkAve.ba.rhBAvg + homeHomeBallparkAve.slg.rhBAvg) / 2.0) /
+                        ((visitorHomeBallparkAve.ba.rhBAvg + visitorHomeBallparkAve.slg.rhBAvg) / 2.0)
+                      if (batter.batsWith == "B") {
+                        if (pitcher.throwsWith == "R") lefty
+                        else righty
+                      } else if (batter.batsWith == "R") righty
+                      else lefty
+                    }
+                  }
+                  val oddsAdj = {
+                    val mlGap = (odds.homeML - odds.visitorML) / 2000.0
+                    val signGap = if (mlGap > 0.0) 1.0 else -1.0
+                    val factor = if (game.startingVisitingPitcher == pitcher.id) {
+                      // Home batter
+                      -1.0 * signGap
+                    } else {
+                      // Visiting Batter
+                      1.0 * signGap
+                    }
+                    (1.0 + factor * mlGap.abs)
+                  }
+                  val baTrend = realityballData.latestBAtrends(game, batter, pitcher)
+                  val matchupAdj = {
+                    val batterStyle = realityballData.batterStyle(batter, game)
+                    val pitcherStyle = realityballData.pitcherStyle(pitcher, game)
+                    if (pitcherStyle == StrikeOut && batterStyle == StrikeOut) {
+                      StrikeOutStrikeOut / MatchupNeutral
+                    } else if (pitcherStyle == FlyBall && batterStyle == FlyBall) {
+                      FlyballFlyball / MatchupNeutral
+                    } else if (pitcherStyle == GroundBall && batterStyle == FlyBall) {
+                      GroundballFlyball / MatchupNeutral
+                    } else if (pitcherStyle == GroundBall && batterStyle == StrikeOut) {
+                      GroundballStrikeOut / MatchupNeutral
+                    } else if (pitcherStyle == StrikeOut && batterStyle == GroundBall) {
+                      StrikeOutGroundball / MatchupNeutral
+                    } else 1.0
+                  }
+                  val fanduelBase = baseFantasyScore.fanDuel
+                  val fanduelVol = baseFantasyScoreVol.fanDuel
+                  val fanduelParkAdj = parkFantasyScoreAdj(batter, "fanduel")
+                  val draftKingsBase = baseFantasyScore.draftKings
+                  val draftKingsVol = baseFantasyScoreVol.draftKings
+                  val draftKingsParkAdj = parkFantasyScoreAdj(batter, "draftKings")
+                  val draftsterBase = baseFantasyScore.draftster
+                  val draftsterVol = baseFantasyScoreVol.draftster
+                  val draftsterParkAdj = parkFantasyScoreAdj(batter, "draftster")
+                  val prediction = FantasyPrediction(batter.id, game.id,
+                    if ((fanduelBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(fanduelBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
+                    if ((draftKingsBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftKingsBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
+                    if ((draftsterBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftsterBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
+                    fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
+                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj))
+                  db.withSession { implicit session =>
+                    fantasyPredictionTable += prediction
+                  }
+                }
+              }
+            }
+        }
+      }
+    })
+  }
+
+  val expectationDate = new DateTime(2014, 4, 30, 0, 0)
+  //val expectationDate = new DateTime(2014, 6, 10, 0, 0)
+
   db.withSession { implicit session =>
     fantasyPredictionTable.ddl.drop
     fantasyPredictionTable.ddl.create
   }
 
-  matchups.foreach({
-    case (game, v) => {
-      val odds = realityballData.odds(game)
-      v.foreach {
-        case (pitcher, batters) =>
-          {
-            batters.foreach { batter =>
-              {
-                val baseFantasyScore = realityballData.latestFantasyData(game, batter)
-                val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
-                val movingStats = realityballData.latestBAdata(game, batter)
-                val pitcherAdj = {
-                  if (pitcher.throwsWith == "R") {
-                    (movingStats.RHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
-                      movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                      movingStats.RHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
-                  } else {
-                    (movingStats.LHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
-                      movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                      movingStats.LHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
-                  }
-                }
-                val parkAdj = {
-                  if (game.startingVisitingPitcher == pitcher.id) 1.0
-                  else {
-                    val visitorHomeBallparkAve = realityballData.ballparkBAbyDate(game.visitingTeam, game.date)
-                    val homeHomeBallparkAve = realityballData.ballparkBAbyDate(game.homeTeam, game.date)
-                    val lefty = ((homeHomeBallparkAve.ba.lhBAvg + homeHomeBallparkAve.slg.lhBAvg) / 2.0) /
-                      ((visitorHomeBallparkAve.ba.lhBAvg + visitorHomeBallparkAve.slg.lhBAvg) / 2.0)
-                    val righty = ((homeHomeBallparkAve.ba.rhBAvg + homeHomeBallparkAve.slg.rhBAvg) / 2.0) /
-                      ((visitorHomeBallparkAve.ba.rhBAvg + visitorHomeBallparkAve.slg.rhBAvg) / 2.0)
-                    if (batter.batsWith == "B") {
-                      if (pitcher.throwsWith == "R") lefty
-                      else righty
-                    } else if (batter.batsWith == "R") righty
-                    else lefty
-                  }
-                }
-                val oddsAdj = {
-                  val mlGap = (odds.homeML - odds.visitorML) / 2000.0
-                  val signGap = if (mlGap > 0.0) 1.0 else -1.0
-                  val factor = if (game.startingVisitingPitcher == pitcher.id) {
-                    // Home batter
-                    -1.0 * signGap
-                  } else {
-                    // Visiting Batter
-                    1.0 * signGap
-                  }
-                  (1.0 + factor * mlGap.abs)
-                }
-                val baTrend = 1.0 + realityballData.latestBAtrends(game, batter, pitcher) * 10.0
-                val fanduelBase = baseFantasyScore.fanDuel
-                val fanduelVol = baseFantasyScoreVol.fanDuel
-                val fanduelParkAdj = parkFantasyScoreAdj(batter, "fanduel")
-                val draftKingsBase = baseFantasyScore.draftKings
-                val draftKingsVol = baseFantasyScoreVol.draftKings
-                val draftKingsParkAdj = parkFantasyScoreAdj(batter, "draftKings")
-                val draftsterBase = baseFantasyScore.draftster
-                val draftsterVol = baseFantasyScoreVol.draftster
-                val draftsterParkAdj = parkFantasyScoreAdj(batter, "draftster")
-                val prediction = FantasyPrediction(batter.id, game.id,
-                  if ((fanduelBase.get * pitcherAdj * parkAdj * baTrend).isNaN) None else Some(fanduelBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj),
-                  if ((draftKingsBase.get * pitcherAdj * parkAdj * baTrend).isNaN) None else Some(draftKingsBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj),
-                  if ((draftsterBase.get * pitcherAdj * parkAdj * baTrend).isNaN) None else Some(draftsterBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj),
-                  fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
-                  if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj))
-                db.withSession { implicit session =>
-                  fantasyPredictionTable += prediction
-                }
-              }
-            }
-          }
-      }
-    }
-  })
-
-  logger.info("********************************")
+  (0 to 190).foreach { x =>
+    logger.info("*****************************")
+    logger.info("*** Creating predictions for " + CcyymmddFormatter.print(expectationDate.plusDays(x)))
+    logger.info("*****************************")
+    processMatchups(expectationDate.plusDays(x))
+  }
 
   // Universe Construction:
   //   Find batters expected to be in lineup tomorrow

@@ -9,7 +9,7 @@ import DefaultJsonProtocol._
 object RealityballRecords {
   import scala.collection.mutable.Queue
 
-  case class Statistic(var total: Double, var rh: Double, var lh: Double)
+  case class Statistic(val date: String, var total: Double, var rh: Double, var lh: Double)
   case class StatisticInputs(var totalNumer: Double, var totalDenom: Double, var rhNumer: Double, var rhDenom: Double, var lhNumer: Double, var lhDenom: Double)
   case class RunningHitterData(lineupPosition: Queue[Int], ba: Queue[StatisticInputs], obp: Queue[StatisticInputs], slugging: Queue[StatisticInputs], fantasy: Map[String, Queue[Statistic]],
                                strikeOuts: Queue[Statistic], flyBalls: Queue[Statistic], groundBalls: Queue[Statistic], baseOnBalls: Queue[Statistic])
@@ -27,7 +27,7 @@ object RealityballRecords {
 
   case class PitcherDaily(id: String, game: String, date: String, var daysSinceLastApp: Int, opposing: String, var win: Int, var loss: Int, var save: Int,
                           var hits: Int, var walks: Int, var hitByPitch: Int, var strikeOuts: Int, var groundOuts: Int, var flyOuts: Int,
-                          var earnedRuns: Int, var outs: Int, var shutout: Boolean, var noHitter: Boolean, var pitches: Int, var balls: Int)
+                          var earnedRuns: Int, var outs: Int, var shutout: Boolean, var noHitter: Boolean, var pitches: Int, var balls: Int, var style: String)
 
   case class Game(id: String, var homeTeam: String, var visitingTeam: String, var site: String, var date: String, var number: Int, var startingHomePitcher: String, var startingVisitingPitcher: String)
   case class GameConditions(id: String, var startTime: String, var daynight: String, var usedh: Boolean,
@@ -45,13 +45,13 @@ object RealityballRecords {
                                eFanduel: Option[Double], eDraftKings: Option[Double], eDraftster: Option[Double],
                                fanduelBase: Option[Double], draftKingsBase: Option[Double], draftsterBase: Option[Double],
                                fanduelVol: Option[Double], draftKingsVol: Option[Double], draftsterVol: Option[Double],
-                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double], oddsAdj: Option[Double])
-  case class HitterStatsMoving(date: String, id: String,
+                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double], oddsAdj: Option[Double], matchupAdj: Option[Double])
+  case class HitterStatsMoving(date: String, id: String, pitcherId: String, pitcherIndex: Int,
                                RHbattingAverageMov: Option[Double], LHbattingAverageMov: Option[Double], battingAverageMov: Option[Double],
                                RHonBasePercentageMov: Option[Double], LHonBasePercentageMov: Option[Double], onBasePercentageMov: Option[Double],
                                RHsluggingPercentageMov: Option[Double], LHsluggingPercentageMov: Option[Double], sluggingPercentageMov: Option[Double],
                                RHstyle: String, LHstyle: String, style: String)
-  case class HitterFantasy(date: String, id: String,
+  case class HitterFantasy(date: String, id: String, pitcherId: String, pitcherIndex: Int,
                            RHfanDuel: Option[Double], LHfanDuel: Option[Double], fanDuel: Option[Double],
                            RHdraftKings: Option[Double], LHdraftKings: Option[Double], draftKings: Option[Double],
                            RHdraftster: Option[Double], LHdraftster: Option[Double], draftster: Option[Double])
@@ -190,8 +190,11 @@ class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fa
   def parkAdj = column[Option[Double]]("parkAdj")
   def baTrendAdj = column[Option[Double]]("baTrendAdj")
   def oddsAdj = column[Option[Double]]("oddsAdj")
+  def matchupAdj = column[Option[Double]]("matchupAdj")
 
-  def * = (id, gameId, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
+  def pk = index("pk_id_game", (id, gameId))
+
+  def * = (id, gameId, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
 }
 
 class GameOddsTable(tag: Tag) extends Table[GameOdds](tag, "gameOdds") {
@@ -288,10 +291,11 @@ class PitcherDailyTable(tag: Tag) extends Table[PitcherDaily](tag, "pitcherDaily
   def noHitter = column[Boolean]("noHitter")
   def pitches = column[Int]("pitches")
   def balls = column[Int]("balls")
+  def style = column[String]("style")
 
   def pk = index("pk_id_date", (id, game)) // Duplicate issue with Joaquin Benoit on 20100910
 
-  def * = (id, game, date, daysSinceLastApp, opposing, win, loss, save, hits, walks, hitByPitch, strikeOuts, groundOuts, flyOuts, earnedRuns, outs, shutout, noHitter, pitches, balls) <> (PitcherDaily.tupled, PitcherDaily.unapply)
+  def * = (id, game, date, daysSinceLastApp, opposing, win, loss, save, hits, walks, hitByPitch, strikeOuts, groundOuts, flyOuts, earnedRuns, outs, shutout, noHitter, pitches, balls, style) <> (PitcherDaily.tupled, PitcherDaily.unapply)
 }
 
 class PlayersTable(tag: Tag) extends Table[Player](tag, "players") {
@@ -319,9 +323,10 @@ class IdMappingTable(tag: Tag) extends Table[IdMapping](tag, "idMapping") {
   def * = (mlbId, mlbName, mlbTeam, brefId, brefName, espnId, espnName, retroId, retroName) <> (IdMapping.tupled, IdMapping.unapply)
 }
 
-class HitterRawLHStatsTable(tag: Tag) extends Table[(String, String, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)](tag, "hitterRawLHstats") {
+class HitterRawLHStatsTable(tag: Tag) extends Table[(String, String, String, Int, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)](tag, "hitterRawLHstats") {
   def date = column[String]("date"); def id = column[String]("id");
   def gameId = column[String]("gameId"); def side = column[Int]("side");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def LHatBat = column[Int]("LHatBat")
   def LHsingle = column[Int]("LHsingle")
   def LHdouble = column[Int]("LHdouble")
@@ -339,13 +344,14 @@ class HitterRawLHStatsTable(tag: Tag) extends Table[(String, String, String, Int
 
   def pk = index("pk_id_date", (id, date)) // First game of double headers are ignored for now
 
-  def * : ProvenShape[(String, String, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
-    (date, id, gameId, side, LHatBat, LHsingle, LHdouble, LHtriple, LHhomeRun, LHRBI, LHruns, LHbaseOnBalls, LHhitByPitch, LHsacFly, LHsacHit, LHstrikeOut, LHflyBall, LHgroundBall)
+  def * : ProvenShape[(String, String, String, Int, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
+    (date, id, gameId, side, pitcherId, pitcherIndex, LHatBat, LHsingle, LHdouble, LHtriple, LHhomeRun, LHRBI, LHruns, LHbaseOnBalls, LHhitByPitch, LHsacFly, LHsacHit, LHstrikeOut, LHflyBall, LHgroundBall)
 }
 
-class HitterRawRHStatsTable(tag: Tag) extends Table[(String, String, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)](tag, "hitterRawRHstats") {
+class HitterRawRHStatsTable(tag: Tag) extends Table[(String, String, String, Int, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)](tag, "hitterRawRHstats") {
   def date = column[String]("date"); def id = column[String]("id");
   def gameId = column[String]("gameId"); def side = column[Int]("side");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHatBat = column[Int]("RHatBat")
   def RHsingle = column[Int]("RHsingle")
   def RHdouble = column[Int]("RHdouble")
@@ -363,15 +369,16 @@ class HitterRawRHStatsTable(tag: Tag) extends Table[(String, String, String, Int
 
   def pk = index("pk_id_date", (id, date)) // First game of double headers are ignored for now
 
-  def * : ProvenShape[(String, String, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
-    (date, id, gameId, side, RHatBat, RHsingle, RHdouble, RHtriple, RHhomeRun, RHRBI, RHruns, RHbaseOnBalls, RHhitByPitch, RHsacFly, RHsacHit, RHstrikeOut, RHflyBall, RHgroundBall)
+  def * : ProvenShape[(String, String, String, Int, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)] =
+    (date, id, gameId, side, pitcherId, pitcherIndex, RHatBat, RHsingle, RHdouble, RHtriple, RHhomeRun, RHRBI, RHruns, RHbaseOnBalls, RHhitByPitch, RHsacFly, RHsacHit, RHstrikeOut, RHflyBall, RHgroundBall)
 }
 
-class HitterDailyStatsTable(tag: Tag) extends Table[(String, String, String, Int, Int, Int, Int, Int, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterDailyStats") {
+class HitterDailyStatsTable(tag: Tag) extends Table[(String, String, String, Int, Int, Int, String, Int, Int, Int, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterDailyStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
-  def lineupPosition = column[Int]("lineupPosition"); def lineupPositionRegime = column[Int]("lineupPositionRegime")
   def gameId = column[String]("gameId"); def side = column[Int]("side");
+  def lineupPosition = column[Int]("lineupPosition"); def lineupPositionRegime = column[Int]("lineupPositionRegime")
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def atBats = column[Int]("ab"); def plateAppearances = column[Int]("pa")
   def RHdailyBattingAverage = column[Option[Double]]("RHdailyBattingAverage")
   def LHdailyBattingAverage = column[Option[Double]]("LHdailyBattingAverage")
@@ -388,7 +395,7 @@ class HitterDailyStatsTable(tag: Tag) extends Table[(String, String, String, Int
 
   def pk = index("pk_id_date", (id, date)) // First game of double headers are ignored for now
 
-  def * = (date, id, gameId, side, lineupPosition, lineupPositionRegime, atBats, plateAppearances,
+  def * = (date, id, gameId, side, lineupPosition, lineupPositionRegime, pitcherId, pitcherIndex, atBats, plateAppearances,
     RHdailyBattingAverage, LHdailyBattingAverage, dailyBattingAverage,
     RHbattingAverage, LHbattingAverage, battingAverage,
     RHonBasePercentage, LHonBasePercentage, onBasePercentage,
@@ -398,6 +405,7 @@ class HitterDailyStatsTable(tag: Tag) extends Table[(String, String, String, Int
 class HitterStatsMovingTable(tag: Tag) extends Table[HitterStatsMoving](tag, "hitterMovingStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHbattingAverageMov = column[Option[Double]]("RHbattingAverageMov")
   def LHbattingAverageMov = column[Option[Double]]("LHbattingAverageMov")
   def battingAverageMov = column[Option[Double]]("battingAverageMov")
@@ -413,17 +421,18 @@ class HitterStatsMovingTable(tag: Tag) extends Table[HitterStatsMoving](tag, "hi
 
   def pk = index("pk_id_date", (id, date))
 
-  def * = (date, id,
+  def * = (date, id, pitcherId, pitcherIndex,
     RHbattingAverageMov, LHbattingAverageMov, battingAverageMov,
     RHonBasePercentageMov, LHonBasePercentageMov, onBasePercentageMov,
     RHsluggingPercentageMov, LHsluggingPercentageMov, sluggingPercentageMov,
     RHstyle, LHstyle, style) <> (HitterStatsMoving.tupled, HitterStatsMoving.unapply)
 }
 
-class HitterFantasyTable(tag: Tag) extends Table[(String, String, String, Int, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterFantasyStats") {
+class HitterFantasyTable(tag: Tag) extends Table[(String, String, String, Int, String, Int, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterFantasyStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
   def gameId = column[String]("gameId"); def side = column[Int]("side");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHfanDuel = column[Option[Double]]("RHfanDuel")
   def LHfanDuel = column[Option[Double]]("LHfanDuel")
   def fanDuel = column[Option[Double]]("fanDuel")
@@ -437,6 +446,7 @@ class HitterFantasyTable(tag: Tag) extends Table[(String, String, String, Int, O
   def pk = index("pk_id_date", (id, date))
 
   def * = (date, id, gameId, side,
+    pitcherId, pitcherIndex,
     RHfanDuel, LHfanDuel, fanDuel,
     RHdraftKings, LHdraftKings, draftKings,
     RHdraftster, LHdraftster, draftster)
@@ -445,6 +455,7 @@ class HitterFantasyTable(tag: Tag) extends Table[(String, String, String, Int, O
 class HitterFantasyMovingTable(tag: Tag) extends Table[HitterFantasy](tag, "hitterFantasyMovingStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHfanDuel = column[Option[Double]]("RHfanDuel")
   def LHfanDuel = column[Option[Double]]("LHfanDuel")
   def fanDuel = column[Option[Double]]("fanDuel")
@@ -457,8 +468,7 @@ class HitterFantasyMovingTable(tag: Tag) extends Table[HitterFantasy](tag, "hitt
 
   def pk = index("pk_id_date", (id, date))
 
-  def * = (date, id,
-    RHfanDuel, LHfanDuel, fanDuel,
+  def * = (date, id, pitcherId, pitcherIndex, RHfanDuel, LHfanDuel, fanDuel,
     RHdraftKings, LHdraftKings, draftKings,
     RHdraftster, LHdraftster, draftster) <> (HitterFantasy.tupled, HitterFantasy.unapply)
 }
@@ -466,6 +476,7 @@ class HitterFantasyMovingTable(tag: Tag) extends Table[HitterFantasy](tag, "hitt
 class HitterFantasyVolatilityTable(tag: Tag) extends Table[HitterFantasy](tag, "hitterFantasyVolatilityStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHfanDuel = column[Option[Double]]("RHfanDuel")
   def LHfanDuel = column[Option[Double]]("LHfanDuel")
   def fanDuel = column[Option[Double]]("fanDuel")
@@ -478,15 +489,16 @@ class HitterFantasyVolatilityTable(tag: Tag) extends Table[HitterFantasy](tag, "
 
   def pk = index("pk_id_date", (id, date))
 
-  def * = (date, id,
+  def * = (date, id, pitcherId, pitcherIndex,
     RHfanDuel, LHfanDuel, fanDuel,
     RHdraftKings, LHdraftKings, draftKings,
     RHdraftster, LHdraftster, draftster) <> (HitterFantasy.tupled, HitterFantasy.unapply)
 }
 
-class HitterStatsVolatilityTable(tag: Tag) extends Table[(String, String, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterVolatilityStats") {
+class HitterStatsVolatilityTable(tag: Tag) extends Table[(String, String, String, Int, Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double])](tag, "hitterVolatilityStats") {
 
   def date = column[String]("date"); def id = column[String]("id");
+  def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
   def RHbattingVolatility = column[Option[Double]]("RHbattingVolatility")
   def LHbattingVolatility = column[Option[Double]]("LHbattingVolatility")
   def battingVolatility = column[Option[Double]]("battingVolatility")
@@ -499,7 +511,7 @@ class HitterStatsVolatilityTable(tag: Tag) extends Table[(String, String, Option
 
   def pk = index("pk_id_date", (id, date))
 
-  def * = (date, id,
+  def * = (date, id, pitcherId, pitcherIndex,
     RHbattingVolatility, LHbattingVolatility, battingVolatility,
     RHonBaseVolatility, LHonBaseVolatility, onBaseVolatility,
     RHsluggingVolatility, LHsluggingVolatility, sluggingVolatility)

@@ -33,9 +33,30 @@ object RealityballConfig {
   val MovingAverageExponentialWeights: List[Double] = {
     val alpha = 0.9
 
-    val rawWeights = (1 to MovingAverageWindow).map({ x => pow(alpha, x.toDouble) })
+    val rawWeights = (0 to MovingAverageWindow - 1).map({ x => pow(alpha, x.toDouble) })
     val totalWeight = rawWeights.foldLeft(0.0)(_ + _)
     rawWeights.map(_ / totalWeight).toList
   }
+
+  val StrikeOut = "StrikeOut"
+  val FlyBall = "FlyBall"
+  val GroundBall = "GroundBall"
+  val BaseOnBalls = "BaseOnBalls"
+
+  val StrikeOutBatterStyleThreshold = (0.206 + 0.062)
+  val FlyballBatterStyleThreshold = (0.381 + 0.057)
+  val GroundballBatterStyleThreshold = (0.328 + 0.070)
+  val BaseOnBallsBatterStyleThreshold = (0.085 + 0.031)
+
+  val StrikeOutPitcherStyleThreshold = (0.301 + 0.076 / 2.0)
+  val FlyballPitcherStyleThreshold = (0.339 + 0.073 / 2.0)
+  val GroundballPitcherStyleThreshold = (0.353 + 0.088 / 2.0)
+
+  val MatchupNeutral = 0.592
+  val StrikeOutStrikeOut = 0.381
+  val FlyballFlyball = 0.749
+  val GroundballFlyball = 0.707
+  val GroundballStrikeOut = 0.496
+  val StrikeOutGroundball = 0.467
 
 }

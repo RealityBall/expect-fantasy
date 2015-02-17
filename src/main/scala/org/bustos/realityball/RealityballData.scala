@@ -42,31 +42,39 @@ class RealityballData {
         hitters <- hitterStats if (hitters.gameId === game.id && hitters.lineupPosition > 0)
         players <- playersTable if (players.id === hitters.id)
       } yield (players, hitters)
-      query.filter({ x => x._1.year === year && x._2.side === side }).sortBy({ x => x._2.lineupPosition }).map({ x => x._1 }).list
+      query.filter({ x => x._1.year === year && x._2.side === side && x._2.pitcherIndex === 1 }).sortBy({ x => x._2.lineupPosition }).map({ x => x._1 }).list
     }
   }
 
   def latestLineupRegime(game: Game, player: Player): Int = {
     db.withSession { implicit session =>
-      hitterStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).map({ _.lineupPositionRegime }).list.head
+      val rows = hitterStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).map({ _.lineupPositionRegime }).list
+      if (rows.isEmpty) 0
+      else rows.head
     }
   }
 
   def latestFantasyData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
-      hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
+      val rows = hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      if (rows.isEmpty) HitterFantasy("", "", "", 0, None, None, None, None, None, None, None, None, None)
+      else rows.head
     }
   }
 
   def latestFantasyVolData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
-      hitterFantasyVolatilityTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
+      val rows = hitterFantasyVolatilityTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      if (rows.isEmpty) HitterFantasy("", "", "", 0, None, None, None, None, None, None, None, None, None)
+      else rows.head
     }
   }
 
   def latestBAdata(game: Game, player: Player): HitterStatsMoving = {
     db.withSession { implicit session =>
-      hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.head
+      val rows = hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      if (rows.isEmpty) HitterStatsMoving("", "", "", 0, None, None, None, None, None, None, None, None, None, "", "", "")
+      else rows.head
     }
   }
 
@@ -88,7 +96,9 @@ class RealityballData {
           }
         })
         val regress: LinearRegression = new LinearRegression(observations)
-        regress.betas._2
+        if (regress.R2 > 0.90) {
+          regress.betas._2
+        } else 1.0
       }
     }
 
@@ -272,23 +282,28 @@ class RealityballData {
   }
 
   def hitterStatsQuery(id: String, year: String): Query[HitterDailyStatsTable, HitterDailyStatsTable#TableElementType, Seq] = {
-    if (year == "All") hitterStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterStats.filter(_.id === truePlayerID(id)).sortBy({ x => (x.date, x.pitcherIndex) })
+    else hitterStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy({ x => (x.date, x.pitcherIndex) })
   }
 
   def hitterMovingStatsQuery(id: String, year: String): Query[HitterStatsMovingTable, HitterStatsMovingTable#TableElementType, Seq] = {
-    if (year == "All") hitterMovingStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterMovingStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterMovingStats.filter(_.id === truePlayerID(id)).sortBy({ x => (x.date, x.pitcherIndex) })
+    else hitterMovingStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy({ x => (x.date, x.pitcherIndex) })
   }
 
   def hitterFantasyQuery(id: String, year: String): Query[HitterFantasyTable, HitterFantasyTable#TableElementType, Seq] = {
-    if (year == "All") hitterFantasyTable.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterFantasyTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterFantasyTable.filter(_.id === truePlayerID(id)).sortBy({ x => (x.date, x.pitcherIndex) })
+    else hitterFantasyTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy({ x => (x.date, x.pitcherIndex) })
   }
 
   def hitterFantasyMovingQuery(id: String, year: String): Query[HitterFantasyMovingTable, HitterFantasyMovingTable#TableElementType, Seq] = {
-    if (year == "All") hitterFantasyMovingTable.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterFantasyMovingTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
+    if (year == "All") hitterFantasyMovingTable.filter(_.id === truePlayerID(id)).sortBy({ x => (x.date, x.pitcherIndex) })
+    else hitterFantasyMovingTable.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy({ x => (x.date, x.pitcherIndex) })
+  }
+
+  def hitterVolatilityStatsQuery(id: String, year: String): Query[HitterStatsVolatilityTable, HitterStatsVolatilityTable#TableElementType, Seq] = {
+    if (year == "All") hitterVolatilityStats.filter(_.id === truePlayerID(id)).sortBy({ x => (x.date, x.pitcherIndex) })
+    else hitterVolatilityStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy({ x => (x.date, x.pitcherIndex) })
   }
 
   def pitcherFantasyQuery(id: String, year: String): Query[PitcherFantasyTable, PitcherFantasyTable#TableElementType, Seq] = {
@@ -299,11 +314,6 @@ class RealityballData {
   def pitcherFantasyMovingQuery(id: String, year: String): Query[PitcherFantasyMovingTable, PitcherFantasyMovingTable#TableElementType, Seq] = {
     if (year == "All") pitcherFantasyMovingStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
     else pitcherFantasyMovingStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
-  }
-
-  def hitterVolatilityStatsQuery(id: String, year: String): Query[HitterStatsVolatilityTable, HitterStatsVolatilityTable#TableElementType, Seq] = {
-    if (year == "All") hitterVolatilityStats.filter(_.id === truePlayerID(id)).sortBy(_.date)
-    else hitterVolatilityStats.filter({ x => x.id === truePlayerID(id) && x.date.startsWith(year) }).sortBy(_.date)
   }
 
   def pitcherDailyQuery(id: String, year: String): Query[PitcherDailyTable, PitcherDailyTable#TableElementType, Seq] = {
@@ -395,15 +405,31 @@ class RealityballData {
 
   def sluggingVolatility(id: String, year: String): List[BattingAverageObservation] = {
     db.withSession { implicit session =>
-      val playerStats = hitterVolatilityStatsQuery(id, year).sortBy(_.date).map(p => (p.date, p.sluggingVolatility, p.LHsluggingVolatility, p.RHsluggingVolatility)).list
+      val playerStats = hitterVolatilityStatsQuery(id, year).sortBy({ x => (x.date, x.pitcherIndex) }).map(p => (p.date, p.sluggingVolatility, p.LHsluggingVolatility, p.RHsluggingVolatility)).list
       playerStats.map({ x => BattingAverageObservation(x._1, displayDouble(x._2), displayDouble(x._3), displayDouble(x._4)) })
     }
   }
 
   def onBaseVolatility(id: String, year: String): List[BattingAverageObservation] = {
     db.withSession { implicit session =>
-      val playerStats = hitterVolatilityStatsQuery(id, year).sortBy(_.date).map(p => (p.date, p.onBaseVolatility, p.LHonBaseVolatility, p.RHonBaseVolatility)).list
+      val playerStats = hitterVolatilityStatsQuery(id, year).sortBy({ x => (x.date, x.pitcherIndex) }).map(p => (p.date, p.onBaseVolatility, p.LHonBaseVolatility, p.RHonBaseVolatility)).list
       playerStats.map({ x => BattingAverageObservation(x._1, displayDouble(x._2), displayDouble(x._3), displayDouble(x._4)) })
+    }
+  }
+
+  def pitcherStyle(player: Player, game: Game): String = {
+    db.withSession { implicit session =>
+      val styleResults = pitcherStats.filter({ x => x.id === player.id && x.date === game.date }).map(_.style).list
+      if (!styleResults.isEmpty) styleResults.head
+      else ""
+    }
+  }
+
+  def batterStyle(player: Player, game: Game): String = {
+    db.withSession { implicit session =>
+      val styleResults = hitterMovingStats.filter({ x => x.id === player.id && x.date === game.date }).map(_.style).list
+      if (!styleResults.isEmpty) styleResults.head
+      else ""
     }
   }
 
