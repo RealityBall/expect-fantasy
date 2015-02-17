@@ -48,15 +48,23 @@ class RealityballData {
 
   def latestLineupRegime(game: Game, player: Player): Int = {
     db.withSession { implicit session =>
-      val rows = hitterStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).map({ _.lineupPositionRegime }).list
+      val rows = hitterStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).map({ _.lineupPositionRegime }).take(1).list
       if (rows.isEmpty) 0
       else rows.head
     }
   }
 
+  def recentFantasyData(game: Game, player: Player, lookback: Int): List[HitterFantasyDaily] = {
+    db.withSession { implicit session =>
+      val rows = hitterFantasyTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(lookback).list
+      if (rows.isEmpty) List.empty[HitterFantasyDaily]
+      else rows
+    }
+  }
+
   def latestFantasyData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
-      val rows = hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      val rows = hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(1).list
       if (rows.isEmpty) HitterFantasy("", "", "", 0, None, None, None, None, None, None, None, None, None)
       else rows.head
     }
@@ -64,7 +72,7 @@ class RealityballData {
 
   def latestFantasyVolData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
-      val rows = hitterFantasyVolatilityTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      val rows = hitterFantasyVolatilityTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(1).list
       if (rows.isEmpty) HitterFantasy("", "", "", 0, None, None, None, None, None, None, None, None, None)
       else rows.head
     }
@@ -72,7 +80,7 @@ class RealityballData {
 
   def latestBAdata(game: Game, player: Player): HitterStatsMoving = {
     db.withSession { implicit session =>
-      val rows = hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list
+      val rows = hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(1).list
       if (rows.isEmpty) HitterStatsMoving("", "", "", 0, None, None, None, None, None, None, None, None, None, "", "", "")
       else rows.head
     }
@@ -87,18 +95,18 @@ class RealityballData {
           {
             val independent = {
               if (pitcher.throwsWith == "R") {
-                (y.LHbattingAverageMov.getOrElse(0.0) + y.LHonBasePercentageMov.getOrElse(0.0) + y.LHsluggingPercentageMov.getOrElse(0.0)) / 3.0
-              } else {
                 (y.RHbattingAverageMov.getOrElse(0.0) + y.RHonBasePercentageMov.getOrElse(0.0) + y.RHsluggingPercentageMov.getOrElse(0.0)) / 3.0
+              } else {
+                (y.LHbattingAverageMov.getOrElse(0.0) + y.LHonBasePercentageMov.getOrElse(0.0) + y.LHsluggingPercentageMov.getOrElse(0.0)) / 3.0
               }
             }
             (x.length.toDouble, independent) :: x
           }
         })
         val regress: LinearRegression = new LinearRegression(observations)
-        if (regress.R2 > 0.90) {
+        if (regress.R2 > 0.75) {
           regress.betas._2
-        } else 1.0
+        } else 0.0
       }
     }
 
@@ -419,7 +427,8 @@ class RealityballData {
 
   def pitcherStyle(player: Player, game: Game): String = {
     db.withSession { implicit session =>
-      val styleResults = pitcherStats.filter({ x => x.id === player.id && x.date === game.date }).map(_.style).list
+      val gameDate = CcyymmddSlashDelimFormatter.parseDateTime(game.date)
+      val styleResults = pitcherStats.filter({ x => x.id === player.id && x.date === CcyymmddFormatter.print(gameDate) }).map(_.style).list
       if (!styleResults.isEmpty) styleResults.head
       else ""
     }
@@ -595,7 +604,7 @@ class RealityballData {
     }
 
     db.withSession { implicit session =>
-      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(MovingAverageWindow)
+      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id.desc).list.take(MovingAverageWindow)
       val processed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
       val ba = replaceWithMovingAverage(processed).reverse.head
       val obpProcessed = records.map { x =>

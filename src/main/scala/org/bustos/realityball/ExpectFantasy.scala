@@ -13,6 +13,8 @@ object ExpectFantasy extends App {
   val realityballData = new RealityballData
   val logger = LoggerFactory.getLogger(getClass)
 
+  var ballparkData = Map.empty[(String, String), BattingAverageSummaries]
+
   def matchups(date: DateTime) = {
 
     def filteredByRegime(game: Game, lineup: List[Player]): List[Player] = {
@@ -65,32 +67,46 @@ object ExpectFantasy extends App {
                 {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
+                  val recentFantasyScores = realityballData.recentFantasyData(game, batter, 30)
+                  val revert = {
+                    recentFantasyScores.foldLeft(0.0)({ case (x, y) => x + (y.fanDuel.getOrElse(Double.NaN) - baseFantasyScore.fanDuel.getOrElse(Double.NaN)) })
+                  }
                   val movingStats = realityballData.latestBAdata(game, batter)
                   val pitcherAdj = {
                     if (pitcher.throwsWith == "R") {
                       (movingStats.RHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
                         movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                        movingStats.RHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
+                        movingStats.RHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0 - 1.0
                     } else {
                       (movingStats.LHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
                         movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                        movingStats.LHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0
+                        movingStats.LHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0 - 1.0
                     }
                   }
                   val parkAdj = {
-                    if (game.startingVisitingPitcher == pitcher.id) 1.0
+                    if (game.startingVisitingPitcher == pitcher.id) 0.0
                     else {
-                      val visitorHomeBallparkAve = realityballData.ballparkBAbyDate(game.visitingTeam, game.date)
-                      val homeHomeBallparkAve = realityballData.ballparkBAbyDate(game.homeTeam, game.date)
+                      val visitorHomeBallparkAve = {
+                        if (!ballparkData.contains((game.visitingTeam, game.date))) {
+                          ballparkData += ((game.visitingTeam, game.date) -> realityballData.ballparkBAbyDate(game.visitingTeam, game.date))
+                        }
+                        ballparkData((game.visitingTeam, game.date))
+                      }
+                      val homeHomeBallparkAve = {
+                        if (!ballparkData.contains((game.homeTeam, game.date))) {
+                          ballparkData += ((game.homeTeam, game.date) -> realityballData.ballparkBAbyDate(game.homeTeam, game.date))
+                        }
+                        ballparkData((game.homeTeam, game.date))
+                      }
                       val lefty = ((homeHomeBallparkAve.ba.lhBAvg + homeHomeBallparkAve.slg.lhBAvg) / 2.0) /
                         ((visitorHomeBallparkAve.ba.lhBAvg + visitorHomeBallparkAve.slg.lhBAvg) / 2.0)
                       val righty = ((homeHomeBallparkAve.ba.rhBAvg + homeHomeBallparkAve.slg.rhBAvg) / 2.0) /
                         ((visitorHomeBallparkAve.ba.rhBAvg + visitorHomeBallparkAve.slg.rhBAvg) / 2.0)
                       if (batter.batsWith == "B") {
-                        if (pitcher.throwsWith == "R") lefty
-                        else righty
-                      } else if (batter.batsWith == "R") righty
-                      else lefty
+                        if (pitcher.throwsWith == "R") lefty - 1.0
+                        else righty - 1.0
+                      } else if (batter.batsWith == "R") righty - 1.0
+                      else lefty - 1.0
                     }
                   }
                   val oddsAdj = {
@@ -103,23 +119,23 @@ object ExpectFantasy extends App {
                       // Visiting Batter
                       1.0 * signGap
                     }
-                    (1.0 + factor * mlGap.abs)
+                    factor * mlGap.abs
                   }
                   val baTrend = realityballData.latestBAtrends(game, batter, pitcher)
                   val matchupAdj = {
                     val batterStyle = realityballData.batterStyle(batter, game)
                     val pitcherStyle = realityballData.pitcherStyle(pitcher, game)
                     if (pitcherStyle == StrikeOut && batterStyle == StrikeOut) {
-                      StrikeOutStrikeOut / MatchupNeutral
+                      (StrikeOutStrikeOut - MatchupNeutral) / MatchupNeutral
                     } else if (pitcherStyle == FlyBall && batterStyle == FlyBall) {
-                      FlyballFlyball / MatchupNeutral
+                      (FlyballFlyball - MatchupNeutral) / MatchupNeutral
                     } else if (pitcherStyle == GroundBall && batterStyle == FlyBall) {
-                      GroundballFlyball / MatchupNeutral
+                      (GroundballFlyball - MatchupNeutral) / MatchupNeutral
                     } else if (pitcherStyle == GroundBall && batterStyle == StrikeOut) {
-                      GroundballStrikeOut / MatchupNeutral
+                      (GroundballStrikeOut - MatchupNeutral) / MatchupNeutral
                     } else if (pitcherStyle == StrikeOut && batterStyle == GroundBall) {
-                      StrikeOutGroundball / MatchupNeutral
-                    } else 1.0
+                      (StrikeOutGroundball - MatchupNeutral) / MatchupNeutral
+                    } else 0.0
                   }
                   val fanduelBase = baseFantasyScore.fanDuel
                   val fanduelVol = baseFantasyScoreVol.fanDuel
@@ -130,12 +146,20 @@ object ExpectFantasy extends App {
                   val draftsterBase = baseFantasyScore.draftster
                   val draftsterVol = baseFantasyScoreVol.draftster
                   val draftsterParkAdj = parkFantasyScoreAdj(batter, "draftster")
+
+                  val valuationFanDuel = Intercept +
+                    BetaFanDuelBase * fanduelBase.getOrElse(Double.NaN) +
+                    BetaPitcherAdj * pitcherAdj +
+                    BetaParkAdj * parkAdj +
+                    BetaBaTrendAdj * baTrend +
+                    BetaOddsAdj * oddsAdj +
+                    BetaMatchupAdj * matchupAdj
                   val prediction = FantasyPrediction(batter.id, game.id,
-                    if ((fanduelBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(fanduelBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
+                    if (valuationFanDuel.isNaN) None else Some(valuationFanDuel),
                     if ((draftKingsBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftKingsBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     if ((draftsterBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftsterBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
-                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj))
+                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj), Some(revert))
                   db.withSession { implicit session =>
                     fantasyPredictionTable += prediction
                   }
