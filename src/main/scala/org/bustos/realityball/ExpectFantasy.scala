@@ -21,7 +21,10 @@ object ExpectFantasy extends App {
       lineup.zipWithIndex.filter({
         case (p, i) => {
           val latestRegime = realityballData.latestLineupRegime(game, p)
-          if (((i + 1) - latestRegime) <= 2) true
+          if (p.position == "P") {
+            logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of position (" + p.position + ")")
+            false
+          } else if (((i + 1) - latestRegime) <= 2) true
           else {
             logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
             false
@@ -67,10 +70,18 @@ object ExpectFantasy extends App {
                 {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
-                  val recentFantasyScores = realityballData.recentFantasyData(game, batter, 30)
-                  val revert = {
-                    recentFantasyScores.foldLeft(0.0)({ case (x, y) => x + (y.fanDuel.getOrElse(Double.NaN) - baseFantasyScore.fanDuel.getOrElse(Double.NaN)) })
-                  }
+                  val recentFantasyScores = realityballData.recentFantasyData(game, batter, 10)
+                  val revert = ({
+                    recentFantasyScores.reverse.foldLeft((0.0, false))({
+                      case (x, y) =>
+                        val diff = y.fanDuel.getOrElse(Double.NaN) - baseFantasyScore.fanDuel.getOrElse(Double.NaN)
+                        if (diff > 0.0 && x._1 >= 0.0 && !x._2) {
+                          (x._1 + 1.0, false)
+                        } else if (diff < 0.0 && x._1 <= 0.0 && !x._2) {
+                          (x._1 - 1.0, false)
+                        } else (x._1, true)
+                    })
+                  })._1
                   val movingStats = realityballData.latestBAdata(game, batter)
                   val pitcherAdj = {
                     if (pitcher.throwsWith == "R") {
