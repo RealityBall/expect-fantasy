@@ -182,7 +182,7 @@ object ExpectFantasy extends App {
     })
   }
 
-  val expectationDate = new DateTime(2014, 4, 30, 0, 0)
+  val expectationDate = new DateTime(2014, 3, 30, 0, 0)
   //val expectationDate = new DateTime(2014, 6, 10, 0, 0)
 
   db.withSession { implicit session =>
