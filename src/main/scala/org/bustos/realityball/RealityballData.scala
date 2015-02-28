@@ -196,22 +196,16 @@ class RealityballData {
         val lineupRegime = hitterStats.filter(_.id === playerMnemonic).map(_.lineupPositionRegime).avg.run.get
         val RHatBats = hitterRawRH.filter(_.id === playerMnemonic).map(_.RHatBat).sum.run.get
         val LHatBats = hitterRawLH.filter(_.id === playerMnemonic).map(_.LHatBat).sum.run.get
-        val gamesQuery = for {
-          r <- hitterRawLH if r.id === playerMnemonic;
-          l <- hitterRawRH if (l.id === playerMnemonic && l.date === r.date)
-        } yield (1)
-        val summary = PlayerSummary(playerMnemonic, lineupRegime, RHatBats, LHatBats, gamesQuery.length.run, mapping.mlbId, mapping.brefId, mapping.espnId)
+        val games = hitterStats.filter({ x => x.id === playerMnemonic && x.pitcherIndex === 1 }).list.length
+        val summary = PlayerSummary(playerMnemonic, lineupRegime, RHatBats, LHatBats, games, mapping.mlbId, mapping.brefId, mapping.espnId)
         PlayerData(player, summary)
       } else {
         val player = playersTable.filter({ x => x.id === playerMnemonic && x.year.startsWith(year) }).list.head
         val lineupRegime = hitterStats.filter({ x => x.id === playerMnemonic && x.date.startsWith(year) }).map(_.lineupPositionRegime).avg.run.get
         val RHatBats = hitterRawRH.filter({ x => x.id === playerMnemonic && x.date.startsWith(year) }).map(_.RHatBat).sum.run.get
         val LHatBats = hitterRawLH.filter({ x => x.id === playerMnemonic && x.date.startsWith(year) }).map(_.LHatBat).sum.run.get
-        val gamesQuery = for {
-          r <- hitterRawLH if r.id === playerMnemonic && r.date.startsWith(year);
-          l <- hitterRawRH if (l.id === playerMnemonic && l.date === r.date)
-        } yield (1)
-        val summary = PlayerSummary(playerMnemonic, lineupRegime, RHatBats, LHatBats, gamesQuery.length.run, mapping.mlbId, mapping.brefId, mapping.espnId)
+        val games = hitterStats.filter({ x => x.id === playerMnemonic && x.date.startsWith(year) && x.pitcherIndex === 1 }).list.length
+        val summary = PlayerSummary(playerMnemonic, lineupRegime, RHatBats, LHatBats, games, mapping.mlbId, mapping.brefId, mapping.espnId)
         PlayerData(player, summary)
       }
     }
@@ -612,9 +606,9 @@ class RealityballData {
     }
 
     db.withSession { implicit session =>
-      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id.desc).list.take(MovingAverageWindow)
-      val processed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
-      val ba = replaceWithMovingAverage(processed).reverse.head
+      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(MovingAverageWindow)
+      val baProcessed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
+      val ba = replaceWithMovingAverage(baProcessed).reverse.head
       val obpProcessed = records.map { x =>
         BattingAverageObservation(x.date,
           safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch + x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch,
@@ -622,7 +616,7 @@ class RealityballData {
           safeRatio(x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch, x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly),
           safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch, x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly))
       }
-      val obp = replaceWithMovingAverage(processed).reverse.head
+      val obp = replaceWithMovingAverage(obpProcessed).reverse.head
       val slgProcessed = records.map { x =>
         BattingAverageObservation(x.date,
           safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch + x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch,
@@ -630,7 +624,7 @@ class RealityballData {
           safeRatio(x.RHhits + x.RHbaseOnBalls + x.RHhitByPitch, x.RHatBat + x.RHbaseOnBalls + x.RHhitByPitch + x.RHsacFly),
           safeRatio(x.LHhits + x.LHbaseOnBalls + x.LHhitByPitch, x.LHatBat + x.LHbaseOnBalls + x.LHhitByPitch + x.LHsacFly))
       }
-      val slg = replaceWithMovingAverage(processed).reverse.head
+      val slg = replaceWithMovingAverage(slgProcessed).reverse.head
       BattingAverageSummaries(ba, obp, slg)
     }
   }

@@ -51,7 +51,7 @@ object RealityballRecords {
                                RHonBasePercentageMov: Option[Double], LHonBasePercentageMov: Option[Double], onBasePercentageMov: Option[Double],
                                RHsluggingPercentageMov: Option[Double], LHsluggingPercentageMov: Option[Double], sluggingPercentageMov: Option[Double],
                                RHstyle: String, LHstyle: String, style: String)
-  case class HitterFantasyDaily(date: String, id: String, gameId: String, side: Int, pitcherId: String, pitcherIndex: Int,
+  case class HitterFantasyDaily(date: String, id: String, gameId: String, side: Int, pitcherId: String, pitcherIndex: Int, productionInterval: Int,
                                 RHfanDuel: Option[Double], LHfanDuel: Option[Double], fanDuel: Option[Double],
                                 RHdraftKings: Option[Double], LHdraftKings: Option[Double], draftKings: Option[Double],
                                 RHdraftster: Option[Double], LHdraftster: Option[Double], draftster: Option[Double])
@@ -439,6 +439,7 @@ class HitterFantasyTable(tag: Tag) extends Table[HitterFantasyDaily](tag, "hitte
   def date = column[String]("date"); def id = column[String]("id");
   def gameId = column[String]("gameId"); def side = column[Int]("side");
   def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
+  def productionInterval = column[Int]("productionInterval")
   def RHfanDuel = column[Option[Double]]("RHfanDuel")
   def LHfanDuel = column[Option[Double]]("LHfanDuel")
   def fanDuel = column[Option[Double]]("fanDuel")
@@ -452,7 +453,7 @@ class HitterFantasyTable(tag: Tag) extends Table[HitterFantasyDaily](tag, "hitte
   def pk = index("pk_id_date", (id, date))
 
   def * = (date, id, gameId, side,
-    pitcherId, pitcherIndex,
+    pitcherId, pitcherIndex, productionInterval,
     RHfanDuel, LHfanDuel, fanDuel,
     RHdraftKings, LHdraftKings, draftKings,
     RHdraftster, LHdraftster, draftster) <> (HitterFantasyDaily.tupled, HitterFantasyDaily.unapply)

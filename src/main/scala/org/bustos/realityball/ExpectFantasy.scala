@@ -24,7 +24,7 @@ object ExpectFantasy extends App {
           if (p.position == "P") {
             logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of position (" + p.position + ")")
             false
-          } else if (((i + 1) - latestRegime) <= 2) true
+          } else if (((i + 1) - latestRegime) <= 2 && latestRegime > 0) true
           else {
             logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
             false
@@ -113,6 +113,9 @@ object ExpectFantasy extends App {
                         ((visitorHomeBallparkAve.ba.lhBAvg + visitorHomeBallparkAve.slg.lhBAvg) / 2.0)
                       val righty = ((homeHomeBallparkAve.ba.rhBAvg + homeHomeBallparkAve.slg.rhBAvg) / 2.0) /
                         ((visitorHomeBallparkAve.ba.rhBAvg + visitorHomeBallparkAve.slg.rhBAvg) / 2.0)
+                      if (lefty > 1.3 || righty > 1.3) {
+                        println("")
+                      }
                       if (batter.batsWith == "B") {
                         if (pitcher.throwsWith == "R") lefty - 1.0
                         else righty - 1.0
@@ -121,7 +124,15 @@ object ExpectFantasy extends App {
                     }
                   }
                   val oddsAdj = {
-                    val mlGap = (odds.homeML - odds.visitorML) / 2000.0
+                    val homeOdds = {
+                      if (odds.homeML > 0) (odds.homeML - 100.0) / 100.0
+                      else (odds.homeML + 100.0) / odds.homeML
+                    }
+                    val visitorOdds = {
+                      if (odds.visitorML > 0) (odds.visitorML - 100.0) / 100.0
+                      else (odds.visitorML + 100.0) / odds.visitorML
+                    }
+                    val mlGap = homeOdds - visitorOdds
                     val signGap = if (mlGap > 0.0) 1.0 else -1.0
                     val factor = if (game.startingVisitingPitcher == pitcher.id) {
                       // Home batter
