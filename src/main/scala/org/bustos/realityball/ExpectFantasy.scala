@@ -71,17 +71,6 @@ object ExpectFantasy extends App {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
                   val recentFantasyScores = realityballData.recentFantasyData(game, batter, 10)
-                  val revert = ({
-                    recentFantasyScores.reverse.foldLeft((0.0, false))({
-                      case (x, y) =>
-                        val diff = y.fanDuel.getOrElse(Double.NaN) - baseFantasyScore.fanDuel.getOrElse(Double.NaN)
-                        if (diff > 0.0 && x._1 >= 0.0 && !x._2) {
-                          (x._1 + 1.0, false)
-                        } else if (diff < 0.0 && x._1 <= 0.0 && !x._2) {
-                          (x._1 - 1.0, false)
-                        } else (x._1, true)
-                    })
-                  })._1
                   val movingStats = realityballData.latestBAdata(game, batter)
                   val pitcherAdj = {
                     if (pitcher.throwsWith == "R") {
@@ -176,12 +165,12 @@ object ExpectFantasy extends App {
                     BetaBaTrendAdj * baTrend +
                     BetaOddsAdj * oddsAdj +
                     BetaMatchupAdj * matchupAdj
-                  val prediction = FantasyPrediction(batter.id, game.id,
+                  val prediction = FantasyPrediction(batter.id, game.id, None,
                     if (valuationFanDuel.isNaN) None else Some(valuationFanDuel),
                     if ((draftKingsBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftKingsBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     if ((draftsterBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftsterBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
-                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj), Some(revert))
+                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj))
                   db.withSession { implicit session =>
                     fantasyPredictionTable += prediction
                   }

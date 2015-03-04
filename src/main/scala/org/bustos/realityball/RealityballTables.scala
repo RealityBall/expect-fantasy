@@ -41,17 +41,17 @@ object RealityballRecords {
   case class FullGameInfo(schedule: GamedaySchedule, odds: GameOdds)
   case class InjuryReport(mlbId: String, reportTime: String, injuryReportDate: String, status: String, dueBack: String, injury: String)
 
-  case class FantasyPrediction(id: String, gameId: String,
+  case class FantasyPrediction(id: String, gameId: String, productionRate: Option[Double],
                                eFanduel: Option[Double], eDraftKings: Option[Double], eDraftster: Option[Double],
                                fanduelBase: Option[Double], draftKingsBase: Option[Double], draftsterBase: Option[Double],
                                fanduelVol: Option[Double], draftKingsVol: Option[Double], draftsterVol: Option[Double],
-                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double], oddsAdj: Option[Double], matchupAdj: Option[Double], revert: Option[Double])
+                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double], oddsAdj: Option[Double], matchupAdj: Option[Double])
   case class HitterStatsMoving(date: String, id: String, pitcherId: String, pitcherIndex: Int,
                                RHbattingAverageMov: Option[Double], LHbattingAverageMov: Option[Double], battingAverageMov: Option[Double],
                                RHonBasePercentageMov: Option[Double], LHonBasePercentageMov: Option[Double], onBasePercentageMov: Option[Double],
                                RHsluggingPercentageMov: Option[Double], LHsluggingPercentageMov: Option[Double], sluggingPercentageMov: Option[Double],
                                RHstyle: String, LHstyle: String, style: String)
-  case class HitterFantasyDaily(date: String, id: String, gameId: String, side: Int, pitcherId: String, pitcherIndex: Int, productionInterval: Int,
+  case class HitterFantasyDaily(date: String, id: String, gameId: String, side: Int, pitcherId: String, pitcherIndex: Int, productionRate: Option[Double],
                                 RHfanDuel: Option[Double], LHfanDuel: Option[Double], fanDuel: Option[Double],
                                 RHdraftKings: Option[Double], LHdraftKings: Option[Double], draftKings: Option[Double],
                                 RHdraftster: Option[Double], LHdraftster: Option[Double], draftster: Option[Double])
@@ -181,6 +181,7 @@ class GamedayScheduleTable(tag: Tag) extends Table[GamedaySchedule](tag, "gameda
 class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fantasyPrediction") {
   def id = column[String]("id")
   def gameId = column[String]("gameId")
+  def productionRate = column[Option[Double]]("productionRate")
   def eFanduel = column[Option[Double]]("eFanduel")
   def eDraftKings = column[Option[Double]]("eDraftKings")
   def eDraftster = column[Option[Double]]("eDraftster")
@@ -195,11 +196,10 @@ class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fa
   def baTrendAdj = column[Option[Double]]("baTrendAdj")
   def oddsAdj = column[Option[Double]]("oddsAdj")
   def matchupAdj = column[Option[Double]]("matchupAdj")
-  def revert = column[Option[Double]]("revert")
 
   def pk = index("pk_id_game", (id, gameId))
 
-  def * = (id, gameId, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, matchupAdj, revert) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
+  def * = (id, gameId, productionRate, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
 }
 
 class GameOddsTable(tag: Tag) extends Table[GameOdds](tag, "gameOdds") {
@@ -439,7 +439,7 @@ class HitterFantasyTable(tag: Tag) extends Table[HitterFantasyDaily](tag, "hitte
   def date = column[String]("date"); def id = column[String]("id");
   def gameId = column[String]("gameId"); def side = column[Int]("side");
   def pitcherId = column[String]("pitcherId"); def pitcherIndex = column[Int]("pitcherIndex")
-  def productionInterval = column[Int]("productionInterval")
+  def productionRate = column[Option[Double]]("productionRate")
   def RHfanDuel = column[Option[Double]]("RHfanDuel")
   def LHfanDuel = column[Option[Double]]("LHfanDuel")
   def fanDuel = column[Option[Double]]("fanDuel")
@@ -453,7 +453,7 @@ class HitterFantasyTable(tag: Tag) extends Table[HitterFantasyDaily](tag, "hitte
   def pk = index("pk_id_date", (id, date))
 
   def * = (date, id, gameId, side,
-    pitcherId, pitcherIndex, productionInterval,
+    pitcherId, pitcherIndex, productionRate,
     RHfanDuel, LHfanDuel, fanDuel,
     RHdraftKings, LHdraftKings, draftKings,
     RHdraftster, LHdraftster, draftster) <> (HitterFantasyDaily.tupled, HitterFantasyDaily.unapply)

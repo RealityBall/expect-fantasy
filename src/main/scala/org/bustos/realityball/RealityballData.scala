@@ -59,14 +59,14 @@ class RealityballData {
       val rows = hitterFantasyTable.filter({ x => x.id === player.id && x.date < game.date })
         .groupBy(_.date)
         .map({
-          case (date, group) => (date,
+          case (date, group) => (date, group.map(_.productionInterval).avg,
             group.map(_.RHfanDuel).sum, group.map(_.LHfanDuel).sum, group.map(_.fanDuel).sum,
             group.map(_.RHdraftKings).sum, group.map(_.LHdraftKings).sum, group.map(_.draftKings).sum,
             group.map(_.RHdraftster).sum, group.map(_.LHdraftster).sum, group.map(_.draftster).sum)
         })
         .sortBy({ _._1.desc }).take(lookback).list
       if (rows.isEmpty) List.empty[HitterFantasyDaily]
-      else rows.map({ x => HitterFantasyDaily(x._1, player.id, game.id, 0, "", 0, x._2, x._3, x._4, x._5, x._6, x._7, x._8, x._9, x._10) })
+      else rows.map({ x => HitterFantasyDaily(x._1, player.id, game.id, 0, "", 0, x._2, x._3, x._4, x._5, x._6, x._7, x._8, x._9, x._10, x._11) })
     }
   }
 
