@@ -70,18 +70,15 @@ object ExpectFantasy extends App {
                 {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
-                  val recentFantasyScores = realityballData.recentFantasyData(game, batter, 10)
                   val movingStats = realityballData.latestBAdata(game, batter)
                   val pitcherAdj = {
-                    if (pitcher.throwsWith == "R") {
-                      (movingStats.RHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
-                        movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                        movingStats.RHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0 - 1.0
-                    } else {
-                      (movingStats.LHbattingAverageMov.getOrElse(Double.NaN) / movingStats.battingAverageMov.getOrElse(Double.NaN) +
-                        movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.onBasePercentageMov.getOrElse(Double.NaN) +
-                        movingStats.LHsluggingPercentageMov.getOrElse(Double.NaN) / movingStats.sluggingPercentageMov.getOrElse(Double.NaN)) / 3.0 - 1.0
-                    }
+                    if (movingStats.RHonBasePercentageMov.getOrElse(0.0) > 0.0 && movingStats.LHonBasePercentageMov.getOrElse(0.0) > 0.0) {
+                      if (pitcher.throwsWith == "R") {
+                        movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) - 1.0
+                      } else {
+                        movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) - 1.0
+                      }
+                    } else 0.0
                   }
                   val parkAdj = {
                     if (game.startingVisitingPitcher == pitcher.id) 0.0
@@ -98,18 +95,8 @@ object ExpectFantasy extends App {
                         }
                         ballparkData((game.homeTeam, game.date))
                       }
-                      val lefty = ((homeHomeBallparkAve.ba.lhBAvg + homeHomeBallparkAve.slg.lhBAvg) / 2.0) /
-                        ((visitorHomeBallparkAve.ba.lhBAvg + visitorHomeBallparkAve.slg.lhBAvg) / 2.0)
-                      val righty = ((homeHomeBallparkAve.ba.rhBAvg + homeHomeBallparkAve.slg.rhBAvg) / 2.0) /
-                        ((visitorHomeBallparkAve.ba.rhBAvg + visitorHomeBallparkAve.slg.rhBAvg) / 2.0)
-                      if (lefty > 1.3 || righty > 1.3) {
-                        println("")
-                      }
-                      if (batter.batsWith == "B") {
-                        if (pitcher.throwsWith == "R") lefty - 1.0
-                        else righty - 1.0
-                      } else if (batter.batsWith == "R") righty - 1.0
-                      else lefty - 1.0
+                      ((homeHomeBallparkAve.ba.bAvg + homeHomeBallparkAve.slg.bAvg) / 2.0) /
+                        ((visitorHomeBallparkAve.ba.bAvg + visitorHomeBallparkAve.slg.bAvg) / 2.0) - 1.0
                     }
                   }
                   val oddsAdj = {
@@ -134,19 +121,49 @@ object ExpectFantasy extends App {
                   }
                   val baTrend = realityballData.latestBAtrends(game, batter, pitcher)
                   val matchupAdj = {
-                    val batterStyle = realityballData.batterStyle(batter, game)
+                    val batterStyle = realityballData.batterStyle(batter, game, pitcher)
                     val pitcherStyle = realityballData.pitcherStyle(pitcher, game)
-                    if (pitcherStyle == StrikeOut && batterStyle == StrikeOut) {
-                      (StrikeOutStrikeOut - MatchupNeutral) / MatchupNeutral
-                    } else if (pitcherStyle == FlyBall && batterStyle == FlyBall) {
-                      (FlyballFlyball - MatchupNeutral) / MatchupNeutral
-                    } else if (pitcherStyle == GroundBall && batterStyle == FlyBall) {
-                      (GroundballFlyball - MatchupNeutral) / MatchupNeutral
-                    } else if (pitcherStyle == GroundBall && batterStyle == StrikeOut) {
-                      (GroundballStrikeOut - MatchupNeutral) / MatchupNeutral
-                    } else if (pitcherStyle == StrikeOut && batterStyle == GroundBall) {
-                      (StrikeOutGroundball - MatchupNeutral) / MatchupNeutral
-                    } else 0.0
+                    if (pitcherStyle == StrikeOut) {
+                      if (batterStyle == StrikeOut) {
+                        (MatchupStrikeOutStrikeOut - MatchupBase) / MatchupBase
+                      } else if (batterStyle == FlyBall) {
+                        (MatchupStrikeOutFlyball - MatchupBase) / MatchupBase
+                      } else if (batterStyle == GroundBall) {
+                        (MatchupStrikeOutGroundball - MatchupBase) / MatchupBase
+                      } else {
+                        (MatchupStrikeOutNeutral - MatchupBase) / MatchupBase
+                      }
+                    } else if (pitcherStyle == FlyBall) {
+                      if (batterStyle == StrikeOut) {
+                        (MatchupFlyballStrikeOut - MatchupBase) / MatchupBase
+                      } else if (batterStyle == FlyBall) {
+                        (MatchupFlyballFlyball - MatchupBase) / MatchupBase
+                      } else if (batterStyle == GroundBall) {
+                        (MatchupFlyballGroundball - MatchupBase) / MatchupBase
+                      } else {
+                        (MatchupFlyBallNeutral - MatchupBase) / MatchupBase
+                      }
+                    } else if (pitcherStyle == GroundBall) {
+                      if (batterStyle == StrikeOut) {
+                        (MatchupGroundballStrikeOut - MatchupBase) / MatchupBase
+                      } else if (batterStyle == FlyBall) {
+                        (MatchupGroundballFlyball - MatchupBase) / MatchupBase
+                      } else if (batterStyle == GroundBall) {
+                        (MatchupGroundballGroundball - MatchupBase) / MatchupBase
+                      } else {
+                        (MatchupGroundballNeutral - MatchupBase) / MatchupBase
+                      }
+                    } else {
+                      if (batterStyle == StrikeOut) {
+                        (MatchupNeutralStrikeOut - MatchupBase) / MatchupBase
+                      } else if (batterStyle == FlyBall) {
+                        (MatchupNeutralFlyball - MatchupBase) / MatchupBase
+                      } else if (batterStyle == GroundBall) {
+                        (MatchupNeutralGroundball - MatchupBase) / MatchupBase
+                      } else {
+                        (MatchupNeutralNeutral - MatchupBase) / MatchupBase
+                      }
+                    }
                   }
                   val fanduelBase = baseFantasyScore.fanDuel
                   val fanduelVol = baseFantasyScoreVol.fanDuel

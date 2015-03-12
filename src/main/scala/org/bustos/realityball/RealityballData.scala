@@ -59,7 +59,7 @@ class RealityballData {
       val rows = hitterFantasyTable.filter({ x => x.id === player.id && x.date < game.date })
         .groupBy(_.date)
         .map({
-          case (date, group) => (date, group.map(_.productionInterval).avg,
+          case (date, group) => (date, group.map(_.productionRate).avg,
             group.map(_.RHfanDuel).sum, group.map(_.LHfanDuel).sum, group.map(_.fanDuel).sum,
             group.map(_.RHdraftKings).sum, group.map(_.LHdraftKings).sum, group.map(_.draftKings).sum,
             group.map(_.RHdraftster).sum, group.map(_.LHdraftster).sum, group.map(_.draftster).sum)
@@ -436,9 +436,11 @@ class RealityballData {
     }
   }
 
-  def batterStyle(player: Player, game: Game): String = {
+  def batterStyle(player: Player, game: Game, pitcher: Player): String = {
     db.withSession { implicit session =>
-      val styleResults = hitterMovingStats.filter({ x => x.id === player.id && x.date === game.date }).map(_.style).list
+      val styleResults = hitterMovingStats.filter({ x => x.id === player.id && x.date === game.date }).map({ x =>
+        if (pitcher.throwsWith == "R") x.RHstyle else x.LHstyle
+      }).list
       if (!styleResults.isEmpty) styleResults.head
       else ""
     }
