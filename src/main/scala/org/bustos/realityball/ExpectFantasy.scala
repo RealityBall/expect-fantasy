@@ -24,7 +24,7 @@ object ExpectFantasy extends App {
           if (p.position == "P") {
             logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of position (" + p.position + ")")
             false
-          } else if (((i + 1) - latestRegime) <= 2 && latestRegime > 0) true
+          } else if ((((i + 1) - latestRegime) <= 2 && latestRegime > 0) || i < 5) true
           else {
             logger.info("\t" + p.firstName + " " + p.lastName + " (" + p.id + ") filtered because of lineup regime (" + latestRegime + " -> " + (i + 1) + ")")
             false
@@ -71,14 +71,18 @@ object ExpectFantasy extends App {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
                   val movingStats = realityballData.latestBAdata(game, batter)
+                  if (batter.id == "cabre001") {
+                    //                    println("")
+                  }
                   val pitcherAdj = {
-                    if (movingStats.RHonBasePercentageMov.getOrElse(0.0) > 0.0 && movingStats.LHonBasePercentageMov.getOrElse(0.0) > 0.0) {
-                      if (pitcher.throwsWith == "R") {
-                        movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) - 1.0
-                      } else {
-                        movingStats.LHonBasePercentageMov.getOrElse(Double.NaN) / movingStats.RHonBasePercentageMov.getOrElse(Double.NaN) - 1.0
-                      }
-                    } else 0.0
+                    val rhFs = realityballData.fsPerPa(batter, game.date, "R")
+                    val lhFs = realityballData.fsPerPa(batter, game.date, "L")
+                    val ratio = if (pitcher.throwsWith == "R") {
+                      if (lhFs != 0.0) (rhFs / lhFs - 1.0) else 0.0
+                    } else {
+                      if (rhFs != 0.0) (lhFs / rhFs - 1.0) else 0.0
+                    }
+                    ratio.min(10.0).max(-10.0)
                   }
                   val parkAdj = {
                     if (game.startingVisitingPitcher == pitcher.id) 0.0

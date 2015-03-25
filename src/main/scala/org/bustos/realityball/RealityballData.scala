@@ -608,7 +608,7 @@ class RealityballData {
     }
 
     db.withSession { implicit session =>
-      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(MovingAverageWindow)
+      val records = ballparkDailiesTable.filter({ x => (x.id < (team + date + "0")) && (x.id like (team + "%")) }).sortBy(_.id).list.take(MovingAverageWindow * 4)
       val baProcessed = records.map { x => BattingAverageObservation(x.date, safeRatio((x.LHhits + x.RHhits), (x.LHatBat + x.RHatBat)), safeRatio(x.LHhits, x.LHatBat), safeRatio(x.RHhits, x.RHatBat)) }
       val ba = replaceWithMovingAverage(baProcessed).reverse.head
       val obpProcessed = records.map { x =>
@@ -721,6 +721,34 @@ class RealityballData {
       } yield (ids.mlbName, injuries.reportTime, injuries.injuryReportDate, injuries.status, injuries.dueBack, injuries.injury)
       injuryReports.list.map({ x => InjuryReport(x._1, x._2, x._3, x._4, x._5, x._6) })
     }
+  }
+
+  def fsPerPa(player: Player, date: String, pitcherHand: String): Double = {
+    /*
+select a.date, a.id, c.throwsWith, a.fanDuel, a.draftKings, a.draftster, b.pa, a.pitcherIndex from
+	hitterFantasyStats a, hitterDailyStats b, players c
+where
+	a.gameId = b.gameId and
+	a.id = b.id and
+    c.id = b.pitcherId and
+    c.year = '2014' and
+    a.pitcherIndex = b.pitcherIndex and
+    a.id = 'cabrm001' and a.date like '2014%'
+order by date, pitcherIndex
+limit 100;
+*/
+    db.withSession { implicit session =>
+      val query = for {
+        dailyStats <- hitterStats if (dailyStats.date <= date && dailyStats.id === player.id)
+        hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === dailyStats.gameId && hitterFantasy.id === dailyStats.id && hitterFantasy.pitcherIndex === dailyStats.pitcherIndex)
+        players <- playersTable if (players.id === hitterFantasy.pitcherId && players.year === "2014" && players.throwsWith === pitcherHand)
+      } yield (dailyStats.date, dailyStats.id, players.throwsWith, dailyStats.plateAppearances, hitterFantasy.fanDuel, hitterFantasy.draftKings, hitterFantasy.draftster)
+      val rows = query.sortBy({ x => x._1.desc }).take(200)
+      val lookback = if (pitcherHand == "R") 40 else 20
+      val sums = rows.foldLeft((0.0, 0))({ case (x, y) => if (x._2 >= lookback) x else (x._1 + y._5.getOrElse(0.0), x._2 + y._4) })
+      if (sums._2 > 0) sums._1 / sums._2.toDouble else 0.0
+    }
+
   }
 
   def availablePredictionDates: List[String] = {
