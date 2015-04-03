@@ -13,7 +13,7 @@ object ExpectFantasy extends App {
   val realityballData = new RealityballData
   val logger = LoggerFactory.getLogger(getClass)
 
-  var ballparkData = Map.empty[(String, String), BattingAverageSummaries]
+  var ballparkData = Map.empty[(String, String), Double]
 
   def matchups(date: DateTime) = {
 
@@ -71,37 +71,30 @@ object ExpectFantasy extends App {
                   val baseFantasyScore = realityballData.latestFantasyData(game, batter)
                   val baseFantasyScoreVol = realityballData.latestFantasyVolData(game, batter)
                   val movingStats = realityballData.latestBAdata(game, batter)
-                  if (batter.id == "cabre001") {
-                    //                    println("")
-                  }
                   val pitcherAdj = {
                     val rhFs = realityballData.fsPerPa(batter, game.date, "R")
                     val lhFs = realityballData.fsPerPa(batter, game.date, "L")
+
+                    //multi break point bayes calculations
+                    //per player model
+                    //trend adj numbers(peter)
+                    //salary model (peter)
+                    //over under
+
+                    val average = (rhFs + lhFs) / 2.0
+
                     val ratio = if (pitcher.throwsWith == "R") {
-                      if (lhFs != 0.0) (rhFs / lhFs - 1.0) else 0.0
+                      (rhFs - lhFs) / average
                     } else {
-                      if (rhFs != 0.0) (lhFs / rhFs - 1.0) else 0.0
+                      (lhFs - rhFs) / average
                     }
                     ratio.min(10.0).max(-10.0)
                   }
                   val parkAdj = {
-                    if (game.startingVisitingPitcher == pitcher.id) 0.0
-                    else {
-                      val visitorHomeBallparkAve = {
-                        if (!ballparkData.contains((game.visitingTeam, game.date))) {
-                          ballparkData += ((game.visitingTeam, game.date) -> realityballData.ballparkBAbyDate(game.visitingTeam, game.date))
-                        }
-                        ballparkData((game.visitingTeam, game.date))
-                      }
-                      val homeHomeBallparkAve = {
-                        if (!ballparkData.contains((game.homeTeam, game.date))) {
-                          ballparkData += ((game.homeTeam, game.date) -> realityballData.ballparkBAbyDate(game.homeTeam, game.date))
-                        }
-                        ballparkData((game.homeTeam, game.date))
-                      }
-                      ((homeHomeBallparkAve.ba.bAvg + homeHomeBallparkAve.slg.bAvg) / 2.0) /
-                        ((visitorHomeBallparkAve.ba.bAvg + visitorHomeBallparkAve.slg.bAvg) / 2.0) - 1.0
+                    if (!ballparkData.contains((game.homeTeam, game.date))) {
+                      ballparkData += ((game.homeTeam, game.date) -> realityballData.ballparkFantasy(game.homeTeam, game.date))
                     }
+                    ballparkData((game.homeTeam, game.date))
                   }
                   val oddsAdj = {
                     val homeOdds = {

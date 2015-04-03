@@ -119,7 +119,7 @@ class RealityballData {
     }
 
     db.withSession { implicit session =>
-      slope(hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).list.take(MovingAverageWindow))
+      slope(hitterMovingStats.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(MovingAverageWindow).list)
     }
   }
 
@@ -550,11 +550,11 @@ class RealityballData {
     def withMovingAverage(list: List[(String, Double)]): List[(String, Double, Double)] = {
       var running = Queue.empty[Double]
       list.map({ x =>
-        {
-          running.enqueue(x._2)
-          if (running.size > TeamMovingAverageWindow) running.dequeue
-          (x._1, x._2, running.foldLeft(0.0)(_ + _) / running.size)
-        }
+      {
+        running.enqueue(x._2)
+        if (running.size > TeamMovingAverageWindow) running.dequeue
+        (x._1, x._2, running.foldLeft(0.0)(_ + _) / running.size)
+      }
       })
     }
 
@@ -566,7 +566,7 @@ class RealityballData {
               union
               select * from hitterFantasyStats where side = 1 and gameId in (select id from games where homeTeam = ?)) history
               group by date order by date
-            """
+                                                        """
         withMovingAverage(q(team, team).list)
       } else {
         val q = Q[(String, String, String, String), (String, Double)] + """
@@ -575,9 +575,29 @@ class RealityballData {
               union
               select * from hitterFantasyStats where side = 1 and gameId in (select id from games where homeTeam = ? and instr(date, ?) > 0)) history
               group by date order by date
-            """
+                                                                        """
         withMovingAverage(q(team, year, team, year).list)
       }
+    }
+  }
+
+  def ballparkFantasy(team: String, date: String): Double = {
+
+    db.withSession { implicit session =>
+        val q = Q[(String, String), Double] + """
+              select sum(fanDuel) / sum(pa) from
+               (select fanDuel, pa from hitterFantasyStats a, hitterDailyStats b
+               where
+                 a.gameId = b.gameId and
+                 a.id = b.id and
+                 a.pitcherIndex = b.pitcherIndex and
+                 a.gameId like ? and
+                 a.date < ?
+               order by
+                 a.date desc
+               limit 600) a
+                            """
+      q(team + "%", date).list.head
     }
   }
 
@@ -743,7 +763,7 @@ limit 100;
         hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === dailyStats.gameId && hitterFantasy.id === dailyStats.id && hitterFantasy.pitcherIndex === dailyStats.pitcherIndex)
         players <- playersTable if (players.id === hitterFantasy.pitcherId && players.year === "2014" && players.throwsWith === pitcherHand)
       } yield (dailyStats.date, dailyStats.id, players.throwsWith, dailyStats.plateAppearances, hitterFantasy.fanDuel, hitterFantasy.draftKings, hitterFantasy.draftster)
-      val rows = query.sortBy({ x => x._1.desc }).take(200)
+      val rows = query.sortBy({ x => x._1.desc }).take(200).list
       val lookback = if (pitcherHand == "R") 40 else 20
       val sums = rows.foldLeft((0.0, 0))({ case (x, y) => if (x._2 >= lookback) x else (x._1 + y._5.getOrElse(0.0), x._2 + y._4) })
       if (sums._2 > 0) sums._1 / sums._2.toDouble else 0.0

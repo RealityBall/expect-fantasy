@@ -451,6 +451,7 @@ class HitterFantasyTable(tag: Tag) extends Table[HitterFantasyDaily](tag, "hitte
   def draftster = column[Option[Double]]("draftster")
 
   def pk = index("pk_id_date", (id, date))
+  def gameIndex = index("gameId_id", (gameId, id))
 
   def * = (date, id, gameId, side,
     pitcherId, pitcherIndex, productionRate,

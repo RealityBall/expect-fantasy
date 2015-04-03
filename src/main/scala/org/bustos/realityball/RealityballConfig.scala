@@ -29,6 +29,7 @@ object RealityballConfig {
 
   val MovingAverageWindow = 25
   val TeamMovingAverageWindow = 10
+  val VolatilityWindow = 100
 
   val MovingAverageExponentialWeights: List[Double] = {
     val alpha = 0.9
@@ -43,6 +44,16 @@ object RealityballConfig {
   val GroundBall = "GroundBall"
   val BaseOnBalls = "BaseOnBalls"
 
+  // Threshold that makes a day productive
+  val ProductionThreshold = 1.0
+
+  // Mean + 1 SD
+  val StrikeOutBatterStyleThreshold = (0.206 + 0.062)
+  val FlyballBatterStyleThreshold = (0.381 + 0.057)
+  val GroundballBatterStyleThreshold = (0.328 + 0.070)
+  val BaseOnBallsBatterStyleThreshold = (0.085 + 0.031)
+
+  // Mean + 0.5 SD
   val StrikeOutPitcherStyleThreshold = (0.301 + 0.076 / 2.0)
   val FlyballPitcherStyleThreshold = (0.339 + 0.073 / 2.0)
   val GroundballPitcherStyleThreshold = (0.353 + 0.088 / 2.0)
