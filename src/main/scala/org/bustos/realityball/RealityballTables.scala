@@ -45,7 +45,8 @@ object RealityballRecords {
                                eFanduel: Option[Double], eDraftKings: Option[Double], eDraftster: Option[Double],
                                fanduelBase: Option[Double], draftKingsBase: Option[Double], draftsterBase: Option[Double],
                                fanduelVol: Option[Double], draftKingsVol: Option[Double], draftsterVol: Option[Double],
-                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double], oddsAdj: Option[Double], matchupAdj: Option[Double])
+                               pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double],
+                               oddsAdj: Option[Double], overUnder: Option[Double], overUnderML: Option[Double], matchupAdj: Option[Double])
   case class HitterStatsMoving(date: String, id: String, pitcherId: String, pitcherIndex: Int,
                                RHbattingAverageMov: Option[Double], LHbattingAverageMov: Option[Double], battingAverageMov: Option[Double],
                                RHonBasePercentageMov: Option[Double], LHonBasePercentageMov: Option[Double], onBasePercentageMov: Option[Double],
@@ -195,11 +196,13 @@ class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fa
   def parkAdj = column[Option[Double]]("parkAdj")
   def baTrendAdj = column[Option[Double]]("baTrendAdj")
   def oddsAdj = column[Option[Double]]("oddsAdj")
+  def overUnder = column[Option[Double]]("overUnder")
+  def overUnderML = column[Option[Double]]("overUnderML")
   def matchupAdj = column[Option[Double]]("matchupAdj")
 
   def pk = index("pk_id_game", (id, gameId))
 
-  def * = (id, gameId, productionRate, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
+  def * = (id, gameId, productionRate, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, overUnder, overUnderML, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
 }
 
 class GameOddsTable(tag: Tag) extends Table[GameOdds](tag, "gameOdds") {

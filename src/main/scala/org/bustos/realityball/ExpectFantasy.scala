@@ -96,6 +96,10 @@ object ExpectFantasy extends App {
                     }
                     ballparkData((game.homeTeam, game.date))
                   }
+                  val overUnderML = {
+                    if (odds.overUnderML < 0.0) odds.overUnderML + 100.0
+                    else odds.overUnderML - 100.0
+                  }
                   val oddsAdj = {
                     val homeOdds = {
                       if (odds.homeML > 0) (odds.homeML - 100.0) / 100.0
@@ -184,7 +188,8 @@ object ExpectFantasy extends App {
                     if ((draftKingsBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftKingsBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     if ((draftsterBase.getOrElse(Double.NaN) * pitcherAdj * parkAdj * baTrend * matchupAdj).isNaN) None else Some(draftsterBase.get * pitcherAdj * parkAdj * baTrend * oddsAdj * matchupAdj),
                     fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
-                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend), Some(oddsAdj), Some(matchupAdj))
+                    if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend),
+                    Some(oddsAdj), Some(odds.overUnder), Some(overUnderML), Some(matchupAdj))
                   db.withSession { implicit session =>
                     fantasyPredictionTable += prediction
                   }
