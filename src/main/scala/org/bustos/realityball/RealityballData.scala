@@ -56,10 +56,10 @@ class RealityballData {
 
   def recentFantasyData(game: Game, player: Player, lookback: Int): List[HitterFantasyDaily] = {
     db.withSession { implicit session =>
-      val rows = hitterFantasyTable.filter({ x => x.id === player.id && x.date < game.date })
+      val rows = hitterFantasyTable.filter({ x => x.id === player.id && x.date <= game.date})
         .groupBy(_.date)
         .map({
-          case (date, group) => (date, group.map(_.productionRate).avg,
+          case (date, group) => (date, group.map(_.productionRate).sum,
             group.map(_.RHfanDuel).sum, group.map(_.LHfanDuel).sum, group.map(_.fanDuel).sum,
             group.map(_.RHdraftKings).sum, group.map(_.LHdraftKings).sum, group.map(_.draftKings).sum,
             group.map(_.RHdraftster).sum, group.map(_.LHdraftster).sum, group.map(_.draftster).sum)
@@ -70,7 +70,7 @@ class RealityballData {
     }
   }
 
-  def latestFantasyData(game: Game, player: Player): HitterFantasy = {
+  def latestFantasyMovData(game: Game, player: Player): HitterFantasy = {
     db.withSession { implicit session =>
       val rows = hitterFantasyMovingTable.filter({ x => x.id === player.id && x.date < game.date }).sortBy({ _.date.desc }).take(1).list
       if (rows.isEmpty) HitterFantasy("", "", "", 0, None, None, None, None, None, None, None, None, None)
@@ -146,7 +146,22 @@ class RealityballData {
       val mappingList = idMappingTable.filter({ x => x.mlbId === mlbId }).list
       if (mappingList.isEmpty) throw new IllegalStateException("No one found with MLB ID: " + mlbId)
       else if (mappingList.length > 1) throw new IllegalStateException("Non Unique MLB ID: " + mlbId)
+      try {
       playerFromRetrosheetId(mappingList.head.retroId, year)
+      } catch {
+        case e: IllegalStateException => {
+          val mapping = mappingList.head
+            try {
+              playerFromRetrosheetId(mlbId, year)
+            } catch {
+              case e: IllegalStateException => {
+          val player = Player(mapping.mlbId, "2015", mapping.mlbName.split(" ").last, mapping.mlbName.split(" ").head, mapping.bats, mapping.throws, mapping.mlbTeam, mapping.mlbPos)
+          playersTable += player
+          player
+            }
+          }
+    }
+  }
     }
   }
 
@@ -183,7 +198,7 @@ class RealityballData {
     db.withSession { implicit session =>
       val mappingList = idMappingTable.filter({ x => x.retroId === id }).list
       if (mappingList.length == 1) mappingList.head
-      else IdMapping("", "", "", "", "", "", "", "", "")
+      else IdMapping("", "", "", "", "", "", "", "", "", "", "", "")
     }
   }
 
@@ -779,60 +794,9 @@ limit 100;
   }
 
   def predictions(date: String, position: String, platform: String): (List[(String, Double, Double)], List[String]) = {
-    val dateForm = CcyymmddFormatter.parseDateTime(date)
-    val doubleFormat = "%1.3f"
-
-    def sortPlatform(x: FantasyPredictionTable): Column[Option[Double]] = {
-      platform match {
-        case "Fanduel"    => x.eFanduel
-        case "DraftKings" => x.eDraftKings
-        case "Draftster"  => x.eDraftster
-      }
-    }
-
-    def platformResults(x: FantasyPredictionTable, y: HitterFantasyTable, z: PlayersTable): (Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[Option[Double]], Column[String], Column[String], Column[String], Column[String], Column[String]) = {
-      platform match {
-        case "Fanduel"    => (x.eFanduel, y.fanDuel, x.fanduelBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
-        case "DraftKings" => (x.eDraftKings, y.draftKings, x.draftKingsBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
-        case "Draftster"  => (x.eDraftster, y.draftster, x.draftsterBase, x.pitcherAdj, x.parkAdj, x.oddsAdj, x.baTrendAdj, z.firstName, z.lastName, z.team, z.position, z.id)
-      }
-    }
-
-    def resultRow(running: (Int, List[(String, Double, Double)], List[String]),
-                  aRow: (Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], Option[Double], String, String, String, String, String)): (Int, List[(String, Double, Double)], List[String]) = {
-      val tooltip = "<div style='padding:5px 5px 5px 5px;width:200px;'>" +
-        "<style type='text/css'>td{width:95px;}h5{text-align:center}</style>" +
-        "<h5>" + aRow._8 + " " + aRow._9 + " (" + aRow._11 + " for " + aRow._10 + ")</h5>" +
-        "<table style='width:190px;'>" +
-        "<tr><td>Base:</td><td align='right'>" + doubleFormat.format(aRow._3.getOrElse(Double.NaN)) + "</td></tr>" +
-        "<tr><td>PitcherAdj:</td><td align='right'>" + doubleFormat.format(aRow._4.getOrElse(Double.NaN)) + "</td></tr>" +
-        "<tr><td>ParkAdj:</td><td align='right'>" + doubleFormat.format(aRow._5.getOrElse(Double.NaN)) + "</td></tr>" +
-        "<tr><td>OddsAdj:</td><td align='right'>" + doubleFormat.format(aRow._6.getOrElse(Double.NaN)) + "</td></tr>" +
-        "<tr><td>BaTrendAdj:</td><td align='right'>" + doubleFormat.format(aRow._7.getOrElse(Double.NaN)) + "</td></tr>" +
-        "</table></div>"
-      (running._1 + 1, (running._1.toString, aRow._1.getOrElse(Double.NaN), aRow._2.getOrElse(Double.NaN)) :: running._2, tooltip :: running._3)
-    }
 
     db.withSession { implicit session =>
-      val query = {
-        if (position == "UNIVERSE") {
-          for {
-            predictions <- fantasyPredictionTable if (predictions.gameId like "%" + date + "%")
-            hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === predictions.gameId && hitterFantasy.id === predictions.id)
-            players <- playersTable if (players.id === hitterFantasy.id && players.year === dateForm.getYear.toString)
-          } yield (predictions, hitterFantasy, players)
-        } else {
-          for {
-            predictions <- fantasyPredictionTable if (predictions.gameId like "%" + date + "%")
-            hitterFantasy <- hitterFantasyTable if (hitterFantasy.gameId === predictions.gameId && hitterFantasy.id === predictions.id)
-            players <- playersTable if (players.id === hitterFantasy.id && players.year === dateForm.getYear.toString && players.position === position)
-          } yield (predictions, hitterFantasy, players)
-        }
-      }
-      var count = 0
-      val rows = query.sortBy({ x => sortPlatform(x._1) }).map({ x => platformResults(x._1, x._2, x._3) }).list
-      val transformed = rows.foldLeft((0, List.empty[(String, Double, Double)], List.empty[String]))({ case (x, y) => resultRow(x, y) })
-      (transformed._2, transformed._3)
+      (List(), List())
     }
   }
 

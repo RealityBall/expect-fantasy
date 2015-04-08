@@ -14,7 +14,7 @@ object RealityballRecords {
   case class RunningHitterData(lineupPosition: Queue[Int], ba: Queue[StatisticInputs], obp: Queue[StatisticInputs], slugging: Queue[StatisticInputs], fantasy: Map[String, Queue[Statistic]],
                                strikeOuts: Queue[Statistic], flyBalls: Queue[Statistic], groundBalls: Queue[Statistic], baseOnBalls: Queue[Statistic])
   case class Team(year: String, mnemonic: String, league: String, city: String, name: String, site: String, zipCode: String,
-                  mlbComId: String, mlbComName: String, timeZone: String, coversComId: String, coversComName: String)
+                  mlbComId: String, mlbComName: String, timeZone: String, coversComId: String, coversComName: String, coversComFullName: String)
 
   case class BattingAverageObservation(date: String, bAvg: Double, lhBAvg: Double, rhBAvg: Double)
   case class BattingAverageSummaries(ba: BattingAverageObservation, obp: BattingAverageObservation, slg: BattingAverageObservation)
@@ -41,8 +41,8 @@ object RealityballRecords {
   case class FullGameInfo(schedule: GamedaySchedule, odds: GameOdds)
   case class InjuryReport(mlbId: String, reportTime: String, injuryReportDate: String, status: String, dueBack: String, injury: String)
 
-  case class FantasyPrediction(id: String, gameId: String, productionRate: Option[Double],
-                               eFanduel: Option[Double], eDraftKings: Option[Double], eDraftster: Option[Double],
+  case class FantasyPrediction(id: String, gameId: String, position: String, bayesianPrediction: Option[Double], productionRate: Option[Double],
+                               fanduelActual: Option[Double], draftKingsActual: Option[Double], draftsterActual: Option[Double],
                                fanduelBase: Option[Double], draftKingsBase: Option[Double], draftsterBase: Option[Double],
                                fanduelVol: Option[Double], draftKingsVol: Option[Double], draftsterVol: Option[Double],
                                pitcherAdj: Option[Double], parkAdj: Option[Double], baTrendAdj: Option[Double],
@@ -66,7 +66,8 @@ object RealityballRecords {
                            var LHhits: Int, var LHtotalBases: Int, var LHatBat: Int, var LHbaseOnBalls: Int, var LHhitByPitch: Int, var LHsacFly: Int)
   case class Ballpark(id: String, name: String, aka: String, city: String, state: String, start: String, end: String, league: String, notes: String)
 
-  case class IdMapping(mlbId: String, mlbName: String, mlbTeam: String, brefId: String, brefName: String, espnId: String, espnName: String, retroId: String, retroName: String)
+  case class IdMapping(mlbId: String, mlbName: String, mlbTeam: String, mlbPos: String, bats: String, throws: String,
+                       brefId: String, brefName: String, espnId: String, espnName: String, retroId: String, retroName: String)
 
   val ballparkDailiesTable = TableQuery[BallparkDailiesTable]
   val ballparkTable = TableQuery[BallparkTable]
@@ -104,7 +105,7 @@ object RealityballJsonProtocol extends DefaultJsonProtocol {
   implicit val pitcherSummaryFormat = jsonFormat9(PitcherSummary)
   implicit val playerDataFormat = jsonFormat2(PlayerData)
   implicit val pitcherDataFormat = jsonFormat2(PitcherData)
-  implicit val teamFormat = jsonFormat12(Team)
+  implicit val teamFormat = jsonFormat13(Team)
   implicit val gamedayScheduleFormat = jsonFormat18(GamedaySchedule)
   implicit val gameOddsFormat = jsonFormat5(GameOdds)
   implicit val fullGameInfoFormat = jsonFormat2(FullGameInfo)
@@ -124,8 +125,9 @@ class TeamsTable(tag: Tag) extends Table[Team](tag, "teams") {
   def timeZone = column[String]("timeZone")
   def coversComId = column[String]("coversComId")
   def coversComName = column[String]("coversComName")
+  def coversComFullName = column[String]("coversComFullName")
 
-  def * = (year, mnemonic, league, city, name, site, zipCode, mlbComId, mlbComName, timeZone, coversComId, coversComName) <> (Team.tupled, Team.unapply)
+  def * = (year, mnemonic, league, city, name, site, zipCode, mlbComId, mlbComName, timeZone, coversComId, coversComName, coversComFullName) <> (Team.tupled, Team.unapply)
 }
 
 class GamesTable(tag: Tag) extends Table[Game](tag, "games") {
@@ -182,10 +184,12 @@ class GamedayScheduleTable(tag: Tag) extends Table[GamedaySchedule](tag, "gameda
 class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fantasyPrediction") {
   def id = column[String]("id")
   def gameId = column[String]("gameId")
+  def position = column[String]("position")
+  def bayesianProduction = column[Option[Double]]("bayesianProduction")
   def productionRate = column[Option[Double]]("productionRate")
-  def eFanduel = column[Option[Double]]("eFanduel")
-  def eDraftKings = column[Option[Double]]("eDraftKings")
-  def eDraftster = column[Option[Double]]("eDraftster")
+  def fanduelActual = column[Option[Double]]("fanduelActual")
+  def draftKingsActual = column[Option[Double]]("draftKingsActual")
+  def draftsterActual = column[Option[Double]]("draftsterActual")
   def fanduelBase = column[Option[Double]]("fanduelBase")
   def draftKingsBase = column[Option[Double]]("draftKingsBase")
   def draftsterBase = column[Option[Double]]("draftsterBase")
@@ -202,7 +206,7 @@ class FantasyPredictionTable(tag: Tag) extends Table[FantasyPrediction](tag, "fa
 
   def pk = index("pk_id_game", (id, gameId))
 
-  def * = (id, gameId, productionRate, eFanduel, eDraftKings, eDraftster, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, overUnder, overUnderML, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
+  def * = (id, gameId, position, bayesianProduction, productionRate, fanduelActual, draftKingsActual, draftsterActual, fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol, pitcherAdj, parkAdj, baTrendAdj, oddsAdj, overUnder, overUnderML, matchupAdj) <> (FantasyPrediction.tupled, FantasyPrediction.unapply)
 }
 
 class GameOddsTable(tag: Tag) extends Table[GameOdds](tag, "gameOdds") {
@@ -322,13 +326,14 @@ class PlayersTable(tag: Tag) extends Table[Player](tag, "players") {
 
 class IdMappingTable(tag: Tag) extends Table[IdMapping](tag, "idMapping") {
   def mlbId = column[String]("mlbId"); def mlbName = column[String]("mlbName"); def mlbTeam = column[String]("mlbTeam")
+  def mlbPos = column[String]("mlbPos"); def bats = column[String]("bats"); def throws = column[String]("throws");
   def brefId = column[String]("brefId"); def brefName = column[String]("brefName");
   def espnId = column[String]("espnId"); def espnName = column[String]("espnName");
   def retroId = column[String]("retroId"); def retroName = column[String]("retroName");
 
   def pk = primaryKey("pk_mlb_id", (mlbId))
 
-  def * = (mlbId, mlbName, mlbTeam, brefId, brefName, espnId, espnName, retroId, retroName) <> (IdMapping.tupled, IdMapping.unapply)
+  def * = (mlbId, mlbName, mlbTeam, mlbPos, bats, throws, brefId, brefName, espnId, espnName, retroId, retroName) <> (IdMapping.tupled, IdMapping.unapply)
 }
 
 class HitterRawLHStatsTable(tag: Tag) extends Table[(String, String, String, Int, String, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)](tag, "hitterRawLHstats") {
