@@ -28,7 +28,6 @@ object RealityballRecords {
   case class PitcherDaily(id: String, game: String, date: String, var daysSinceLastApp: Int, opposing: String, var win: Int, var loss: Int, var save: Int,
                           var hits: Int, var walks: Int, var hitByPitch: Int, var strikeOuts: Int, var groundOuts: Int, var flyOuts: Int,
                           var earnedRuns: Int, var outs: Int, var shutout: Boolean, var noHitter: Boolean, var pitches: Int, var balls: Int, var style: String)
-
   case class Game(id: String, var homeTeam: String, var visitingTeam: String, var site: String, var date: String, var number: Int, var startingHomePitcher: String, var startingVisitingPitcher: String)
   case class GameConditions(id: String, var startTime: String, var daynight: String, var usedh: Boolean,
                             var temp: Int, var winddir: String, var windspeed: Int, var fieldcond: String, var precip: String, var sky: String)
@@ -68,6 +67,7 @@ object RealityballRecords {
 
   case class IdMapping(mlbId: String, mlbName: String, mlbTeam: String, mlbPos: String, bats: String, throws: String,
                        brefId: String, brefName: String, espnId: String, espnName: String, retroId: String, retroName: String)
+  case class Lineup(mlbId: String, date: String, game: String, team: String, lineupPosition: Int, position: String, acesSalary: Option[Double], draftKingsSalary: Option[Double], fanduelSalary: Option[Double])
 
   val ballparkDailiesTable = TableQuery[BallparkDailiesTable]
   val ballparkTable = TableQuery[BallparkTable]
@@ -88,6 +88,7 @@ object RealityballRecords {
   val idMappingTable = TableQuery[IdMappingTable]
   val injuryReportTable = TableQuery[InjuryReportTable]
   val pitcherDailyTable = TableQuery[PitcherDailyTable]
+  val lineupsTable = TableQuery[LineupsTable]
   val pitcherFantasy = TableQuery[PitcherFantasyTable]
   val pitcherFantasyMoving = TableQuery[PitcherFantasyMovingTable]
   val pitcherFantasyMovingStats = TableQuery[PitcherFantasyMovingTable]
@@ -282,8 +283,8 @@ class GameScoringTable(tag: Tag) extends Table[GameScoring](tag, "gameScoring") 
 }
 
 class PitcherDailyTable(tag: Tag) extends Table[PitcherDaily](tag, "pitcherDaily") {
-  def id = column[String]("id");
-  def game = column[String]("game");
+  def id = column[String]("id")
+  def game = column[String]("game")
   def date = column[String]("date")
   def daysSinceLastApp = column[Int]("daysSinceLastApp")
   def opposing = column[String]("opposing")
@@ -308,6 +309,22 @@ class PitcherDailyTable(tag: Tag) extends Table[PitcherDaily](tag, "pitcherDaily
   def pk = index("pk_id_date", (id, game)) // Duplicate issue with Joaquin Benoit on 20100910
 
   def * = (id, game, date, daysSinceLastApp, opposing, win, loss, save, hits, walks, hitByPitch, strikeOuts, groundOuts, flyOuts, earnedRuns, outs, shutout, noHitter, pitches, balls, style) <> (PitcherDaily.tupled, PitcherDaily.unapply)
+}
+
+class LineupsTable(tag: Tag) extends Table[Lineup](tag, "lineups") {
+  def mlbId = column[String]("mlbId")
+  def date = column[String]("date")
+  def game = column[String]("game")
+  def team = column[String]("team")
+  def lineupPosition = column[Int]("lineupPosition")
+  def position = column[String]("position")
+  def acesSalary = column[Option[Double]]("acesSalary")
+  def draftKingsSalary = column[Option[Double]]("draftKingsSalary")
+  def fanduelSalary = column[Option[Double]]("fanduelSalary")
+
+  def pk = index("pk_id_date", (mlbId, date))
+
+  def * = (mlbId, date, game, team, lineupPosition, position, acesSalary, draftKingsSalary, fanduelSalary) <> (Lineup.tupled, Lineup.unapply)
 }
 
 class PlayersTable(tag: Tag) extends Table[Player](tag, "players") {

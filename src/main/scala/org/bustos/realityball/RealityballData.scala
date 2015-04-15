@@ -24,6 +24,12 @@ class RealityballData {
     }
   }
 
+  def teamFromName(name: String): Team = {
+    db.withSession { implicit session =>
+      teamsTable.filter(_.mlbComName === name).sortBy(_.year.desc).list.head
+    }
+  }
+
   def mlbComIdFromRetrosheet(team: String): String = {
     db.withSession { implicit session =>
       teamsTable.filter(_.mnemonic === team).map(_.mlbComId).list.head
@@ -32,8 +38,13 @@ class RealityballData {
 
   def games(date: DateTime): List[Game] = {
     db.withSession { implicit session =>
-      gamesTable.filter({ x => x.date === CcyymmddSlashDelimFormatter.print(date) }).list
+      val dateString = CcyymmddSlashDelimFormatter.print(date)
+      val todaysGames = gamesTable.filter({ x => x.date === dateString }).list
+      if (todaysGames.isEmpty) {
+        gamedayScheduleTable.filter({ x => x.date === CcyymmddFormatter.print(date)}).list.map (x => Game(x.id, x.homeTeam, x.visitingTeam, x.site, dateString, x.number, x.startingHomePitcher, x.startingVisitingPitcher))
     }
+      else todaysGames
+  }
   }
 
   def startingBatters(game: Game, side: Int, year: String): List[Player] = {
@@ -144,7 +155,10 @@ class RealityballData {
   def playerFromMlbId(mlbId: String, year: String): Player = {
     db.withSession { implicit session =>
       val mappingList = idMappingTable.filter({ x => x.mlbId === mlbId }).list
-      if (mappingList.isEmpty) throw new IllegalStateException("No one found with MLB ID: " + mlbId)
+      if (mappingList.isEmpty) {
+        if (mlbId == "502304") return playersTable.filter({x => x.id === "carpd001"}).list.head // Crunchtime Baseball is missing
+        else throw new IllegalStateException("No one found with MLB ID: " + mlbId)
+      }
       else if (mappingList.length > 1) throw new IllegalStateException("Non Unique MLB ID: " + mlbId)
       try {
       playerFromRetrosheetId(mappingList.head.retroId, year)
@@ -152,7 +166,7 @@ class RealityballData {
         case e: IllegalStateException => {
           val mapping = mappingList.head
             try {
-              playerFromRetrosheetId(mlbId, year)
+              playerFromRetrosheetId(mlbId, "")
             } catch {
               case e: IllegalStateException => {
           val player = Player(mapping.mlbId, "2015", mapping.mlbName.split(" ").last, mapping.mlbName.split(" ").head, mapping.bats, mapping.throws, mapping.mlbTeam, mapping.mlbPos)
@@ -168,7 +182,12 @@ class RealityballData {
   def playerFromName(firstName: String, lastName: String, year: String, team: String): Player = {
     db.withSession { implicit session =>
       val playerList = playersTable.filter({ x => x.firstName.like(firstName + "%") && x.lastName === lastName && x.year === year }).list
-      if (playerList.isEmpty) throw new IllegalStateException("No one found by the name of: " + firstName + " " + lastName)
+      if (playerList.isEmpty) {
+        val mapping = mappingForName(firstName, lastName)
+        if (mapping.retroId != "") playerFromRetrosheetId(mapping.retroId, "")
+        else if (mapping.mlbId != "") playerFromMlbId(mapping.mlbId, year)
+        else throw new IllegalStateException("No one found by the name of: " + firstName + " " + lastName)
+      }
       else if (playerList.length > 1) {
         if (team != "") {
           val teamPlayerList = playersTable.filter({ x => x.firstName.like(firstName + "%") && x.lastName === lastName && x.year === year && x.team === team }).list
@@ -191,6 +210,17 @@ class RealityballData {
         val partitions = playersTable.filter({ x => x.team === team && x.year === year }).list.partition(_.position != "P")
         partitions._1.sortBy(_.lastName) ++ partitions._2.sortBy(_.lastName)
       }
+    }
+  }
+
+  def mappingForName(firstName: String, lastName: String): IdMapping = {
+    db.withSession { implicit session =>
+      val nameString = firstName + "%" + lastName
+      val mappingList = idMappingTable.filter({ x => x.mlbName like nameString }).list
+      val retroMappingList = idMappingTable.filter({ x => x.retroName like nameString }).list
+      if (mappingList.length == 1) mappingList.head
+      else if (retroMappingList.length == 1) retroMappingList.head
+      else IdMapping("", "", "", "", "", "", "", "", "", "", "", "")
     }
   }
 
