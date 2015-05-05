@@ -153,40 +153,76 @@ class RealityballData {
   }
 
   def playerFromMlbId(mlbId: String, year: String): Player = {
+
+    def useMlbId: Player = {
+      try {
+        playerFromRetrosheetId(mlbId, "")
+      } catch {
+        case e: IllegalStateException => {
+          val mlbPlayer = new MlbPlayer(mlbId)
+          db.withSession { implicit session =>
+            playersTable += mlbPlayer.player
+          }
+          return mlbPlayer.player
+        }
+      }
+    }
+
     db.withSession { implicit session =>
       val mappingList = idMappingTable.filter({ x => x.mlbId === mlbId }).list
       if (mappingList.isEmpty) {
         if (mlbId == "502304") return playersTable.filter({x => x.id === "carpd001"}).list.head // Crunchtime Baseball is missing
-        else throw new IllegalStateException("No one found with MLB ID: " + mlbId)
+        else return useMlbId
       }
       else if (mappingList.length > 1) throw new IllegalStateException("Non Unique MLB ID: " + mlbId)
       try {
       playerFromRetrosheetId(mappingList.head.retroId, year)
-      } catch {
-        case e: IllegalStateException => {
-          val mapping = mappingList.head
-            try {
-              playerFromRetrosheetId(mlbId, "")
             } catch {
-              case e: IllegalStateException => {
-          val player = Player(mapping.mlbId, "2015", mapping.mlbName.split(" ").last, mapping.mlbName.split(" ").head, mapping.bats, mapping.throws, mapping.mlbTeam, mapping.mlbPos)
-          playersTable += player
-          player
-            }
-          }
-    }
+        case e: IllegalStateException => useMlbId
   }
     }
   }
 
   def playerFromName(firstName: String, lastName: String, year: String, team: String): Player = {
     db.withSession { implicit session =>
+      /*
+      def checkIfNeeded(mlbId: String, firstName: String, lastName: String, team: String, position: String, bats: String, throws: String): Player = {
+        val playerList = playersTable.filter({ x => x.id === mlbId }).list
+        if (playerList.isEmpty) {
+          val mapping = IdMapping(mlbId, firstName + " " + lastName, team, position, bats, throws, "", "", "", "", mlbId, firstName + " " + lastName)
+          idMappingTable += mapping
+          val player = Player(mlbId, "2015", lastName, firstName, bats, throws, team, position)
+          playersTable += player
+          player
+        } else {
+          playerList.head
+      */
+  }
+    }
+
       val playerList = playersTable.filter({ x => x.firstName.like(firstName + "%") && x.lastName === lastName && x.year === year }).list
       if (playerList.isEmpty) {
         val mapping = mappingForName(firstName, lastName)
         if (mapping.retroId != "") playerFromRetrosheetId(mapping.retroId, "")
         else if (mapping.mlbId != "") playerFromMlbId(mapping.mlbId, year)
         else throw new IllegalStateException("No one found by the name of: " + firstName + " " + lastName)
+        /*{
+          if (firstName.toLowerCase == "allan" && lastName.toLowerCase == "dykstra") {
+            checkIfNeeded("488852", "Allan", "Dykstra", "TBA", "1B", "L", "R")
+          } else if (firstName.toLowerCase == "matt" && lastName.toLowerCase == "tracy") {
+            checkIfNeeded("595441", "Matt", "Tracy", "NYA", "P", "L", "L")
+          } else if (firstName.toLowerCase == "kyle" && lastName.toLowerCase == "davies") {
+            checkIfNeeded("434678", "Kyle", "Davies", "NYA", "P", "R", "R")
+          } else if (firstName.toLowerCase == "chris" && lastName.toLowerCase == "rearick") {
+            checkIfNeeded("595371", "Chris", "Rearick", "SDN", "P", "L", "L")
+          } else if (firstName.toLowerCase == "sugar" && lastName.toLowerCase == "ray marimon") {
+            checkIfNeeded("516970", "Sugar Ray", "Marimon", "ATL", "P", "R", "R")
+          } else if (firstName.toLowerCase == "scott" && lastName.toLowerCase == "oberg") {
+            checkIfNeeded("623184", "Scott", "Oberg", "COL", "P", "R", "R")
+          } else if (firstName.toLowerCase == "rafael" && lastName.toLowerCase == "martin") {
+            checkIfNeeded("514669", "Rafael", "Martin", "WAS", "P", "R", "R")
+          } else throw new IllegalStateException("No one found by the name of: " + firstName + " " + lastName)
+        }*/
       }
       else if (playerList.length > 1) {
         if (team != "") {
