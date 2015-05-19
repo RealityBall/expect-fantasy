@@ -5,8 +5,9 @@ import org.joda.time.format._
 import org.slf4j.LoggerFactory
 import scala.slick.driver.MySQLDriver.simple._
 import scala.slick.jdbc.meta.MTable
-import RealityballRecords._
-import RealityballConfig._
+import org.bustos.realityball.common.RealityballRecords._
+import org.bustos.realityball.common.RealityballConfig._
+import org.bustos.realityball.common.RealityballData
 
 object ExpectFantasy extends App {
 
@@ -59,9 +60,9 @@ object ExpectFantasy extends App {
     Some(0.0)
   }
 
-  def bayesianPrediction(odds: Double, pitcher: Double, matchup: Double, rate: Double, park: Double, overUnder: Double): Double = {
+  def bayesianPrediction(odds: Double, pitcher: Double, matchup: Double, rate: Double, park: Double, overUnder: Double): Option[Double] = {
     var start = 1.0
-    0.0
+    Some(0.0)
   }
 
   def processedBatters(game: Game, pitcher: Player, batters: List[Player], odds: GameOdds): List[FantasyPrediction] = {
@@ -175,7 +176,7 @@ object ExpectFantasy extends App {
       val draftsterVol = baseFantasyScoreVol.draftster
       val draftsterParkAdj = parkFantasyScoreAdj(batter, "draftster")
 
-      FantasyPrediction(batter.id, game.id, batter.position,
+      FantasyPrediction(batter.id, game.date, game.id, batter.position,
         bayesianPrediction(oddsAdj, pitcherAdj, matchupAdj, recentFantasyData.head.productionRate.get, parkAdj, odds.overUnder), recentFantasyData.head.productionRate,
         recentFantasyData.head.fanDuel, recentFantasyData.head.draftKings, recentFantasyData.head.draftster,
         fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
@@ -204,7 +205,7 @@ object ExpectFantasy extends App {
     fantasyPredictionTable.ddl.create
   }
 
-  (0 to 190).foreach { x =>
+  (0 to 400).foreach { x =>
     logger.info("*****************************")
     logger.info("*** Creating predictions for " + CcyymmddFormatter.print(expectationDate.plusDays(x)))
     logger.info("*****************************")
