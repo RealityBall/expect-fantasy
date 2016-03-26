@@ -1,10 +1,8 @@
 package org.bustos.realityball
 
 import org.joda.time._
-import org.joda.time.format._
 import org.slf4j.LoggerFactory
 import scala.slick.driver.MySQLDriver.simple._
-import scala.slick.jdbc.meta.MTable
 import org.bustos.realityball.common.RealityballRecords._
 import org.bustos.realityball.common.RealityballConfig._
 import org.bustos.realityball.common.RealityballData
@@ -88,7 +86,7 @@ object ExpectFantasy extends App {
         } else {
           (lhFs - rhFs) / average
         }
-        ratio.min(10.0).max(-10.0)
+        ratio.min(5.0).max(-5.0)
       }
       val parkAdj = {
         if (!ballparkData.contains((game.homeTeam, game.date))) {
@@ -97,8 +95,9 @@ object ExpectFantasy extends App {
         ballparkData((game.homeTeam, game.date))
       }
       val overUnderML = {
-        if (odds.overUnderML < 0.0) odds.overUnderML + 100.0
-        else odds.overUnderML - 100.0
+        if (odds.overUnderML < 0.0) (odds.overUnderML + 100.0) / 100.0
+        else if (odds.overUnderML > 0.0) (odds.overUnderML - 100.0) / 100.0
+        else 0.0
       }
       val oddsAdj = {
         val homeOdds = {
@@ -118,7 +117,7 @@ object ExpectFantasy extends App {
           // Visiting Batter
           1.0 * signGap
         }
-        factor * mlGap.abs
+        (factor * mlGap.abs).min(0.5).max(0.5)
       }
       val baTrend = realityballData.latestBAtrends(game, batter, pitcher)
       val matchupAdj = {
@@ -176,10 +175,9 @@ object ExpectFantasy extends App {
       val draftsterVol = baseFantasyScoreVol.draftster
       val draftsterParkAdj = parkFantasyScoreAdj(batter, "draftster")
 
-      FantasyPrediction(batter.id, game.date, game.id, batter.position,
-        bayesianPrediction(oddsAdj, pitcherAdj, matchupAdj, recentFantasyData.head.productionRate.get, parkAdj, odds.overUnder), recentFantasyData.head.productionRate,
-        recentFantasyData.head.fanDuel, recentFantasyData.head.draftKings, recentFantasyData.head.draftster,
-        fanduelBase, draftKingsBase, draftsterBase, fanduelVol, draftKingsVol, draftsterVol,
+      FantasyPrediction(batter.id, game.date, game.id, batter.position, pitcher.throwsWith, recentFantasyData.head.productionRate, recentFantasyData.head.daysSinceProduction,
+        recentFantasyData.head.fanDuel, recentFantasyData.head.draftster,
+        fanduelBase, draftsterBase, fanduelVol, draftsterVol,
         if (pitcherAdj.isNaN) None else Some(pitcherAdj), Some(parkAdj), Some(baTrend),
         Some(oddsAdj), Some(odds.overUnder), Some(overUnderML), Some(matchupAdj))
     }
@@ -198,7 +196,6 @@ object ExpectFantasy extends App {
   }
 
   val expectationDate = new DateTime(2014, 3, 30, 0, 0)
-  //val expectationDate = new DateTime(2014, 6, 10, 0, 0)
 
   db.withSession { implicit session =>
     fantasyPredictionTable.ddl.drop
