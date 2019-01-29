@@ -1,16 +1,19 @@
 package org.bustos.realityball
 
+import org.bustos.realityball.common.RealityballConfig._
+import org.bustos.realityball.common.{RealityballData, RealityballJsonProtocol}
+import org.bustos.realityball.common.RealityballRecords._
 import org.joda.time._
 import org.slf4j.LoggerFactory
-import scala.slick.driver.MySQLDriver.simple._
-import org.bustos.realityball.common.RealityballRecords._
-import org.bustos.realityball.common.RealityballConfig._
-import org.bustos.realityball.common.RealityballData
+import slick.jdbc.MySQLProfile.api._
 
-object ExpectFantasy extends App {
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration.Inf
+
+object ExpectFantasy extends App with RealityballJsonProtocol {
 
   val realityballData = new RealityballData
-  val logger = LoggerFactory.getLogger(getClass)
+  val logger = LoggerFactory.getLogger("ExpectFantasy")
 
   var ballparkData = Map.empty[(String, String), Double]
 
@@ -89,10 +92,10 @@ object ExpectFantasy extends App {
         ratio.min(5.0).max(-5.0)
       }
       val parkAdj = {
-        if (!ballparkData.contains((game.homeTeam, game.date))) {
-          ballparkData += ((game.homeTeam, game.date) -> realityballData.ballparkFantasy(game.homeTeam, game.date))
+        if (!ballparkData.contains((game.homeTeam, game.date.toString))) {
+          ballparkData += ((game.homeTeam, game.date.toString) -> realityballData.ballparkFantasy(game.homeTeam, game.date.toString))
         }
-        ballparkData((game.homeTeam, game.date))
+        ballparkData((game.homeTeam, game.date.toString))
       }
       val overUnderML = {
         if (odds.overUnderML < 0.0) (odds.overUnderML + 100.0) / 100.0
@@ -195,12 +198,10 @@ object ExpectFantasy extends App {
     }.toList
   }
 
-  val expectationDate = new DateTime(2014, 3, 30, 0, 0)
+  val expectationDate = new DateTime(2017, 3, 30, 0, 0)
 
-  db.withSession { implicit session =>
-    fantasyPredictionTable.ddl.drop
-    fantasyPredictionTable.ddl.create
-  }
+  Await.result(db.run(fantasyPredictionTable.schema.drop), Inf)
+  Await.result(db.run(fantasyPredictionTable.schema.create), Inf)
 
   (0 to 400).foreach { x =>
     logger.info("*****************************")
@@ -211,9 +212,7 @@ object ExpectFantasy extends App {
     byPosition.foreach( { case (k, v) =>
         logger.info("Position: " + k + " " + v.map({_.id}).mkString(","))
     })
-    db.withSession { implicit session =>
-      fantasyPredictionTable ++= matchups
-    }
+    Await.result(db.run(fantasyPredictionTable ++= matchups), Inf)
 
   }
 
