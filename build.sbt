@@ -1,10 +1,15 @@
+import scala.util.Properties.envOrElse
+
 lazy val commonSettings = Seq(
    organization := "org.bustos",
    version := "0.1.0",
    scalaVersion := "2.11.7"
 )
 
-lazy val commons = ProjectRef(file("../common"), "common")
+lazy val commons = {
+  if (envOrElse("BUILD_ENV", "") == "") ProjectRef(uri("https://github.com/RealityBall/common.git"), "common")
+  else ProjectRef(file("../common"), "common")
+}
 
 lazy val expectFantasy = (project in file("."))
    .settings(name := "expect-fantasy")
